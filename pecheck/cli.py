@@ -8,8 +8,8 @@ from . import __version__
 from .scan import scan_targets
 from .model import CRITICAL
 
-# REVIEW first, then errors, then unknown, then ok: what a human reads first
-_ORDER = {"REVIEW": 0, "error": 1, "unsigned/unknown": 2, "ok": 3}
+# REVIEW first, then errors, then unknown, then notes, then ok
+_ORDER = {"REVIEW": 0, "error": 1, "unsigned/unknown": 2, "note": 3, "ok": 4}
 
 
 def _vt(sha256):
@@ -18,23 +18,24 @@ def _vt(sha256):
 
 def print_report(r):
     print(f"\n=== {r.path}")
-    if r.error:
+    if r.verdict == "error":
         print(f"  ERROR: {r.error}")
         return
     if r.duplicate_of:
         print(f"  byte-identical to {r.duplicate_of} (deduplicated)")
         return
-    print(f"  arch={r.arch}  size={r.size:,}  sha256={r.sha256[:16]}...")
-    if r.sig:
-        s, who = r.sig
-        print(f"  signature: {s}" + (f" ({who})" if who not in ("-", "") else ""))
-    elif r.weak_cert:
-        orgs, notafter, _ = r.weak_cert
-        extra = (f"; signer strings ~ {orgs}" if orgs else "") + \
-                (f"; notAfter {notafter}" if notafter else "")
-        print(f"  signature: cert-table present (weak mode, validity NOT verified{extra})")
-    else:
-        print(f"  signature: {'cert-table present' if r.signed else 'unsigned'} (weak mode: validity NOT verified)")
+    print(f"  kind={r.kind}  arch={r.arch or '-'}  size={r.size:,}  sha256={r.sha256[:16]}...")
+    if r.kind == "PE" or r.signed or r.sig:
+        if r.sig:
+            s, who = r.sig
+            print(f"  signature: {s}" + (f" ({who})" if who not in ("-", "") else ""))
+        elif r.weak_cert:
+            orgs, notafter, _ = r.weak_cert
+            extra = (f"; signer strings ~ {orgs}" if orgs else "") + \
+                    (f"; notAfter {notafter}" if notafter else "")
+            print(f"  signature: cert-table present (weak mode, validity NOT verified{extra})")
+        else:
+            print(f"  signature: {'cert-table present' if r.signed else 'unsigned'} (weak mode: validity NOT verified)")
     for name, e, kb in r.sections:
         marker = "  <-- HIGH (>7.5)" if e > 7.5 and kb > 10 else ""
         print(f"    section {name:12} entropy={e:5.2f} rawKB={kb}{marker}")
@@ -46,7 +47,7 @@ def print_report(r):
                 continue
             seen.add(key)
             print(f"  [{f.category}] {f.detail}")
-    else:
+    elif r.kind == "PE":
         print("  no suspicious imports")
 
 
@@ -57,7 +58,9 @@ def print_summary(result):
     print("=" * 70)
     review = [r for r in reports if r.verdict == "REVIEW"]
     errors = [r for r in reports if r.verdict == "error"]
-    signed_ok = [r for r in reports if r.verdict == "ok"]
+    notes = [r for r in reports if r.verdict == "note"]
+    signed_ok = [r for r in reports if r.verdict == "ok" and r.kind == "PE"]
+    clean = [r for r in reports if r.verdict == "ok" and r.kind != "PE"]
     unknown = [r for r in reports if r.verdict == "unsigned/unknown"]
 
     if review:
@@ -75,11 +78,33 @@ def print_summary(result):
         for r in errors:
             print(f"     {os.path.basename(r.path):45} {r.error}")
 
+    if result.folders:
+        print("\n  Folder rollup:")
+        for f in result.folders:
+            bits = [f"{f.total} file(s)"]
+            if f.review:
+                bits.append(f"{f.review} REVIEW")
+            if f.error:
+                bits.append(f"{f.error} error")
+            if f.unknown:
+                bits.append(f"{f.unknown} unsigned/unknown")
+            if f.note:
+                bits.append(f"{f.note} note")
+            if f.ok:
+                bits.append(f"{f.ok} ok")
+            line = f"     {f.path}: {', '.join(bits)}"
+            if f.top_categories:
+                line += "  top: " + ", ".join(f"{c}x{n}" for c, n in f.top_categories)
+            print(line)
+
     if signed_ok:
-        print(f"\n  OK  {len(signed_ok)} signed, no critical imports:")
+        print(f"\n  OK  {len(signed_ok)} signed PE(s), no critical imports:")
         for r in signed_ok:
             who = r.sig[1][:60] if r.sig else "cert-table present"
             print(f"     {os.path.basename(r.path):45} {who}")
+
+    if clean:
+        print(f"\n  OK  {len(clean)} non-PE file(s) clean ({len(notes)} with notes total)")
 
     if unknown:
         print("\n  i  Unsigned / signature not verified (not necessarily bad, just unproven):")
@@ -87,7 +112,7 @@ def print_summary(result):
             print(f"     {os.path.basename(r.path):45} vt: {_vt(r.sha256)}")
 
     if result.side_files:
-        print("\n  i  Non-PE script/launcher files present (common dropper vectors):")
+        print("\n  i  Context files present (scene markers / MOTW artifacts):")
         for p in result.side_files[:10]:
             print(f"     {p}")
         if len(result.side_files) > 10:
@@ -95,11 +120,12 @@ def print_summary(result):
 
     print("\n  VERDICT: " + (
         f"REVIEW REQUIRED - {len(review)} file(s) flagged (see above)" if review
-        else f"no critical findings: {len(signed_ok)} signed, {len(unknown)} unsigned/unknown"))
+        else f"no critical findings: {len(signed_ok)} signed, {len(unknown)} unsigned/unknown, "
+             f"{len(clean)} clean non-PE, {len(notes)} notes"))
 
 
 def main(argv=None):
-    ap = argparse.ArgumentParser(prog="pecheck", description="static PE triage")
+    ap = argparse.ArgumentParser(prog="pecheck", description="static triage for any binary: PE, ELF, scripts, archives, docs")
     ap.add_argument("targets", nargs="+", help="file or directory")
     ap.add_argument("--json", action="store_true", help="machine-readable output")
     ap.add_argument("--no-sigs", action="store_true", help="skip WinVerifyTrust signature check")
@@ -116,11 +142,11 @@ def main(argv=None):
     ordered = sorted(result.reports, key=lambda r: (_ORDER.get(r.verdict, 9), r.path))
     n = len(result.reports)
     if args.json:
-        from pecheck import __version__
         payload = {
             "schema": "pecheck-report/1",
             "pecheck": __version__,
             "files": [r.to_dict() for r in result.reports],
+            "folders": [f.__dict__ for f in result.folders],
             "side_files": result.side_files,
         }
         print(json.dumps(payload, indent=1))

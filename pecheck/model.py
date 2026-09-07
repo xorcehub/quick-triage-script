@@ -10,26 +10,31 @@ Severity = Literal["CRITICAL", "note"]
 
 @dataclass
 class Finding:
-    category: str          # e.g. INJECT, PACKED?, MEM?, PROV, STR, IOC
+    category: str          # e.g. INJECT, PACKED?, MEM?, PROV, STR, IOC, SCRIPT
     detail: str
     severity: Severity = NOTE
 
 
 @dataclass
 class Target:
-    """One parsed PE file plus context shared by all detectors."""
+    """One loaded file plus context shared by all detectors (any kind)."""
     path: str
     size: int
     sha256: str
-    pe: object = None      # pefile.PE (None on parse error)
-    raw: bytes = b""
+    kind: str = "DATA"     # identify.py kind: PE|ELF|ZIP|SCRIPT|PDF|...
+    raw: bytes = b""       # first RAW_CAP bytes
+    pe: object = None      # pefile.PE when kind==PE (None on parse error)
     arch: str = None       # x64 | x86 | ARM64 | hex
-    error: str = None      # pefile parse failure text
-    siblings: list = field(default_factory=list)  # lowercase basenames of other PEs in same dir
+    error: str = None      # OSError text; PE-parse failure text (kind stays PE)
+    siblings: list = field(default_factory=list)  # lowercase basenames of other files in same dir
 
     @property
     def basename(self) -> str:
         return os.path.basename(self.path)
+
+    @property
+    def ext(self) -> str:
+        return os.path.splitext(self.path)[1].lower()
 
 
 @dataclass
@@ -37,13 +42,14 @@ class FileReport:
     path: str
     size: int
     sha256: str
+    kind: str = "DATA"
     arch: str = None
     error: str = None
     signed: bool = False            # cert table present (weak presence check)
     sig: tuple = None               # wintrust result: (status, signer) or None
     sections: list = field(default_factory=list)   # (name, entropy, kb)
     findings: list = field(default_factory=list)   # [Finding]
-    verdict: str = None             # REVIEW | ok | unsigned/unknown | error
+    verdict: str = None             # REVIEW | note | ok | unsigned/unknown | error
     weak_cert: tuple = None         # (signer strings, notAfter str) when sig check unavailable
     duplicate_of: str = None        # path of the byte-identical file we deduped against
 
@@ -66,9 +72,23 @@ class FileReport:
 
 
 @dataclass
+class FolderRollup:
+    """Verdict aggregate for one directory that directly contains files."""
+    path: str
+    total: int
+    review: int
+    note: int
+    ok: int
+    unknown: int
+    error: int
+    top_categories: list = field(default_factory=list)  # [(category, count)]
+
+
+@dataclass
 class ScanResult:
     reports: list
     side_files: list = field(default_factory=list)
+    folders: list = field(default_factory=list)          # [FolderRollup]
 
     def __iter__(self):
         return iter(self.reports)
