@@ -1,0 +1,44 @@
+"""Section-level heuristics: entropy, W+X, packed exec sections."""
+import math
+
+from ..model import Finding, CRITICAL
+
+
+def shannon(data):
+    if not data:
+        return 0.0
+    counts = [0] * 256
+    for b in data:
+        counts[b] += 1
+    n = len(data)
+    return -sum((c / n) * math.log2(c / n) for c in counts if c)
+
+
+def section_table(t):
+    """-> [(name, entropy, kb)] for the report."""
+    rows = []
+    if t.error or t.pe is None:
+        return rows
+    for s in t.pe.sections:
+        name = s.Name.rstrip(b"\x00").decode(errors="replace")
+        data = s.get_data()[:1 << 20]
+        e = shannon(data) if data else 0.0
+        rows.append((name, round(e, 2), round(s.SizeOfRawData / 1024, 1)))
+    return rows
+
+
+def run(t):
+    out = []
+    if t.error or t.pe is None:
+        return out
+    for s in t.pe.sections:
+        name = s.Name.rstrip(b"\x00").decode(errors="replace")
+        data = s.get_data()[:1 << 20]
+        e = shannon(data) if data else 0.0
+        kb = round(s.SizeOfRawData / 1024, 1)
+        exec_ = bool(s.Characteristics & 0x20000000)  # IMAGE_SCN_MEM_EXECUTE
+        if exec_ and (s.Characteristics & 0x80000000):  # IMAGE_SCN_MEM_WRITE
+            out.append(Finding("EVADE?", f"section {name} is writable+executable"))
+        if exec_ and e > 7.5 and kb > 10:
+            out.append(Finding("PACKED?", f"executable section {name} entropy {round(e, 2)} (packed/shellcode?)", CRITICAL))
+    return out

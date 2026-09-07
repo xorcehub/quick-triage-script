@@ -1,0 +1,16 @@
+[build-system]
+requires = ["setuptools>=64"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "pecheck"
+version = "1.0.0"
+description = "Static PE triage: imports, signatures, packing and staging heuristics"
+requires-python = ">=3.9"
+dependencies = ["pefile"]
+
+[project.scripts]
+pecheck = "pecheck.cli:main"
+
+[tool.setuptools]
+packages = ["pecheck", "pecheck.detectors"]
