@@ -31,16 +31,19 @@ def _zip(t):
             encrypted.append(name)
         if info.compress_size and info.file_size / info.compress_size > 100:
             bombs.append(name)
-        if low.endswith(_MEMBER_HEAD_EXTS):
-            if low.endswith((".exe", ".dll", ".scr", ".jar")):
-                exes.append(name)
-            else:
-                scripts.append(name)
+        if low.endswith((".exe", ".dll", ".scr", ".jar")):
+            exes.append(name)
+        elif low.endswith(_MEMBER_HEAD_EXTS):
+            scripts.append(name)
+        elif low.endswith((".zip", ".7z", ".rar", ".gz")):
+            nested.append(name)
+        # head-sniff every member (capped): catches hidden binaries behind any ext
+        if len(infos) <= 128:
             try:
                 with zf.open(info) as f:  # lazy: reads only the needed chunk
                     head = f.read(512)
             except Exception:
-                continue
+                head = b""
             if head[:2] == b"MZ":       # MZ head: PE or DOS image either way
                 seen_kinds.append((name, "PE"))
             elif head[:4] == b"\x7fELF":
@@ -54,11 +57,14 @@ def _zip(t):
                                   f"{', '.join(exes[:5])}{'...' if len(exes) > 5 else ''}"))
     if scripts:
         out.append(Finding("ARCH?", f"zip contains script member(s): {', '.join(scripts[:5])}"))
+    _ok_exec_exts = ("exe", "dll", "scr", "jar", "ocx", "cpl", "sys")
     for name, kind in seen_kinds:
-        ext = name.rsplit(".", 1)[-1]
-        if kind == "PE" and ext not in ("exe", "dll", "scr", "jar"):
+        ext = name.rsplit(".", 1)[-1].lower()
+        if kind == "PE" and ext not in _ok_exec_exts:
             out.append(Finding("ARCH!", f"member '{name[:60]}' is a PE hidden behind .{ext}", CRITICAL))
-        else:
+        elif kind == "encoded script":
+            out.append(Finding("ARCH!", f"member '{name[:60]}' is an encoded script", CRITICAL))
+        elif ext not in _ok_exec_exts:
             out.append(Finding("NOTE", f"member '{name[:60]}' head-sniff: {kind}"))
     if nested:
         out.append(Finding("NOTE", f"nested archive member(s): {', '.join(nested[:3])}"))

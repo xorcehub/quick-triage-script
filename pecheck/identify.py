@@ -88,9 +88,14 @@ def _has_pe_sig(path, head):
 
 
 def _looks_text(head):
-    """>=90% printable/whitespace in the first 4KB -> treat as text."""
+    """>=90% printable/whitespace (or UTF-16LE: printable + NUL padding) -> text."""
     if not head:
         return False
-    printable = sum(1 for b in head[:4096]
-                    if 0x20 <= b < 0x7f or b in (9, 10, 13))
-    return printable / min(len(head), 4096) >= 0.9
+    n = min(len(head), 4096)
+    printable = sum(1 for b in head[:n] if 0x20 <= b < 0x7f or b in (9, 10, 13))
+    ratio = printable / n
+    if ratio >= 0.9:
+        return True
+    # utf-16le: half the bytes are NUL, the rest printable ascii
+    nulls = sum(1 for b in head[:n] if b == 0)
+    return ratio >= 0.35 and (printable + nulls) / n >= 0.9

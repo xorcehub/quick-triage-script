@@ -18,13 +18,13 @@ def _scan_target(t, siblings, sig):
         return r
     t.siblings = list(siblings)
     pe = t.pe
+    if t.error:  # pefile failed on an MZ file: forged/truncated - flag it
+        r.findings.append(Finding("EVADE?", f"PE parse error on MZ image: {t.error}", CRITICAL))
     if pe is not None:
         try:
             r.signed = bool(pe.OPTIONAL_HEADER.DATA_DIRECTORY[4].VirtualAddress)  # SECURITY dir
         except (IndexError, AttributeError):
             r.signed = False  # truncated NumberOfRvaAndSizes
-        if t.error:  # pefile failed on an MZ file: forged/truncated - flag it
-            r.findings.append(Finding("EVADE?", f"PE parse error on MZ image: {t.error}", CRITICAL))
 
     for det in ALL + GENERIC:
         try:
