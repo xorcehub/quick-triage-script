@@ -21,9 +21,10 @@ def _pdf(t, raw):
     if not hits:
         return out  # clean PDF - silence (a note on every legit PDF is noise)
     js = "/JavaScript" in hits or "/JS" in hits
-    launch = "/Launch" in hits
-    if launch and js:
-        out.append(Finding("DOC!", "PDF /Launch + /JavaScript (classic exploit-doc combo)", CRITICAL))
+    auto = "/Launch" in hits or "/OpenAction" in hits or "/AA" in hits
+    if auto and js:
+        out.append(Finding("DOC!", "PDF auto-run (/Launch or /OpenAction) + /JavaScript "
+                                   "(classic exploit-doc combo)", CRITICAL))
     for h in hits:
         cat = "DOC?" if h in ("/OpenAction", "/AA", "/Launch", "/RichMedia") else "NOTE"
         out.append(Finding(cat, f"PDF marker {h}"))

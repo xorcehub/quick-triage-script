@@ -7,7 +7,26 @@ import re
 from ..model import Finding, CRITICAL
 
 _LNK_CLSID = bytes.fromhex("0114020000000000c000000000000046")
-_NORM_WS = re.compile(rb"\\s+")
+_NORM_WS = re.compile(rb"\s+")
+
+
+def _norm(raw):
+    return _NORM_WS.sub(b"", raw).lower()
+
+
+def _hits(norm, pats):
+    return [p.decode() for p in pats if p in norm]
+
+
+PS_DL = (b"downloadstring", b"downloadfile", b"downloaddata", b"invoke-webrequest",
+         b"invoke-restmethod", b"net.webclient", b"httpwebrequest", b"webclient")
+PS_EX = (b"invoke-expression", b"iex", b"start-process", b"&(")
+PS_DEC = (b"frombase64string", b"-encodedcommand", b"-enc", b"gzipstream", b"deflatestream")
+_A1 = b"amsi" + b"init" + b"failed"
+_A2 = b"amsi" + b"utils"
+PS_TAMPER = (_A1, _A2, b"set-mppreference", b"add-mppreference",
+             b"-disablerealtimemonitoring", b"virtualprotect", b"getprocaddress")
+
 BAT_BAD = ((b"powershell", b"-enc", b"-encodedcommand", b"-w1", b"-whidden",
             b"-windowstylehidden", b"-nop", b"-noprofile"),
            (b"certutil", b"-urlcache", b"-decode", b"-verifyctl"),
@@ -15,6 +34,10 @@ BAT_BAD = ((b"powershell", b"-enc", b"-encodedcommand", b"-w1", b"-whidden",
            (b"mshta", b"vbscript:"),
            (b"regadd", b"currentversion\\run"),
            (b"curl", b"http"), (b"wget", b"http"))
+VBS_NET = (b"msxml2.xmlhttp", b"winhttp.winhttprequest", b"msxml2.serverxmlhttp", b"adodb.stream")
+VBS_EX = (b"savetofile", b".run(", b"shellexecute", b"wscript.shell", b"createobject(")
+LNK_BAD = (b"powershell", b"cmd.exe", b"-enc", b"-encodedcommand", b"whidden",
+           b"windowstyle", b"certutil", b"mshta", b"wscript", b"rundll32")
 
 
 def _ps1(t, raw, norm):

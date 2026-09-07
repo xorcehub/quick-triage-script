@@ -51,5 +51,5 @@ def run(t):
             or any(m in t.raw for m in EMU_MARKS)
         if emu_ctx:
             out.append(Finding("CONTEXT", "steam emulator pattern (goldberg/creamapi-style "
-                                          "steam_api replacement) - downgrade sideload verdict"))
+                                          "steam_api replacement) - proxy-DLL verdict downgraded"))
     return out
