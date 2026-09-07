@@ -16,7 +16,10 @@ def scan_file(path, siblings=(), sigs=None):
         r.verdict = "unsigned/unknown"
         return r
     pe = t.pe
-    r.signed = bool(pe.OPTIONAL_HEADER.DATA_DIRECTORY[4].VirtualAddress)  # SECURITY dir
+    try:
+        r.signed = bool(pe.OPTIONAL_HEADER.DATA_DIRECTORY[4].VirtualAddress)  # SECURITY dir
+    except (IndexError, AttributeError):
+        r.signed = False  # truncated NumberOfRvaAndSizes
     for det in ALL:
         try:
             r.findings.extend(det.run(t))

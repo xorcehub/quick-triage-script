@@ -30,12 +30,10 @@ CMDLINE_RE = re.compile(
 
 
 def extract(raw, min_len=MIN_LEN):
-    """-> (ascii_strings, utf16_strings), capped."""
-    ascii_re = re.compile(rb"[\x20-\x7e]{%d,}" % min_len)
-    asc = [m.group() for m in ascii_re.finditer(raw, MAX_STRINGS * 40)]
+    """-> utf16 strings (capped). ASCII extraction is covered by the raw regex passes."""
     u16 = re.compile(rb"(?:[\x20-\x7e]\x00){%d,}" % min_len)
-    uni = [m.group().decode("utf-16le", errors="replace") for m in u16.finditer(raw, MAX_STRINGS * 40)]
-    return asc[:MAX_STRINGS], uni[:MAX_STRINGS]
+    return [m.group().decode("utf-16le", errors="replace")
+            for m in u16.finditer(raw, 0, MAX_STRINGS * 40)][:MAX_STRINGS]
 
 
 def run(t):
@@ -51,11 +49,8 @@ def run(t):
             raw = raw[:sec.VirtualAddress] + b"\x00" * (end - sec.VirtualAddress) + raw[end:]
     except Exception:
         pass
-    asc, uni = extract(raw)
+    uni = extract(raw)
     joined_u = "\n".join(uni)
-
-    def u_hits(rx):
-        return set(m.group() for m in rx.finditer(joined_u.encode("utf-16le" if False else "latin-1", "ignore")))
 
     urls = {u.decode("latin-1", "replace") for u in URL_RE.findall(raw)}
     urls |= {u.decode("latin-1", "replace") for u in URL_RE.findall(joined_u.encode("latin-1", "ignore"))}

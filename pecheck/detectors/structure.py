@@ -44,7 +44,7 @@ def _overlay_region(pe, raw):
             if cert_end <= end:
                 # overlay = gap before cert + anything after cert
                 pre = (start, sec.VirtualAddress)
-                post = (cert_end, end) if cert_end < end else None
+                post = (cert_end, end) if cert_end < end else ()
                 return pre, post
     except Exception:
         pass
