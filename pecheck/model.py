@@ -1,15 +1,18 @@
 """Data model shared by all detectors."""
+import os
 from dataclasses import dataclass, field, asdict
+from typing import Literal
 
 CRITICAL = "CRITICAL"
 NOTE = "note"
+Severity = Literal["CRITICAL", "note"]
 
 
 @dataclass
 class Finding:
-    category: str          # e.g. INJECT, PACKED?, MEM?, PROV, STR, SIDELoad...
+    category: str          # e.g. INJECT, PACKED?, MEM?, PROV, STR, IOC
     detail: str
-    severity: str = NOTE   # CRITICAL | note
+    severity: Severity = NOTE
 
 
 @dataclass
@@ -26,7 +29,6 @@ class Target:
 
     @property
     def basename(self) -> str:
-        import os
         return os.path.basename(self.path)
 
 
@@ -41,8 +43,13 @@ class FileReport:
     sig: tuple = None               # wintrust result: (status, signer) or None
     sections: list = field(default_factory=list)   # (name, entropy, kb)
     findings: list = field(default_factory=list)   # [Finding]
-    verdict: str = None             # REVIEW | ok | unsigned/unknown
-    engine: str = None              # reserved: per-file provenance note
+    verdict: str = None             # REVIEW | ok | unsigned/unknown | error
+    weak_cert: tuple = None         # (signer strings, notAfter str) when sig check unavailable
+    duplicate_of: str = None        # path of the byte-identical file we deduped against
+
+    @property
+    def basename(self) -> str:
+        return os.path.basename(self.path)
 
     @property
     def crit(self):
@@ -50,5 +57,24 @@ class FileReport:
 
     def to_dict(self):
         d = asdict(self)
-        d["crit"] = self.crit
+        d.pop("crit", None)
+        d["findings"] = [{"severity": f.severity, "category": f.category, "detail": f.detail}
+                         for f in sorted(self.findings, key=lambda f: (f.severity != CRITICAL,))]
+        if self.sig is not None:
+            d["sig"] = {"status": self.sig[0], "signer": self.sig[1]}
         return d
+
+
+@dataclass
+class ScanResult:
+    reports: list
+    side_files: list = field(default_factory=list)
+
+    def __iter__(self):
+        return iter(self.reports)
+
+    def __len__(self):
+        return len(self.reports)
+
+    def __getitem__(self, i):
+        return self.reports[i]

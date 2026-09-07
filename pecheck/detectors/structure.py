@@ -6,18 +6,31 @@ from ..model import Finding
 
 PACKER_SECTIONS = {"upx0", "upx1", "upx2", "upx!", "mpress1", "mpress2",
                    ".aspack", ".adata", ".themida", ".vmp0", ".vmp1", ".enigma1", "pebundle"}
-# magic -> label (checked at overlay start and inside RCDATA-style resources)
+# magic -> label; sniffed within the first 2KB of overlay/resource blobs
+# (installers often prefix archive data with SFX config scripts)
 MAGICS = (
     (b"MEI\x0c\x0b\x0a\x0b\x0e", "PyInstaller archive"),
     (b"\x7fELF", "embedded ELF"),
     (b"7z\xbc\xaf\x27\x1c", "7z archive"),
+    (b";@Install@", "7-Zip SFX config (installer)"),
+    (b"!@Install@", "7-Zip SFX config (installer)"),
     (b"PK\x03\x04", "zip archive"),
     (b"Rar!", "rar archive"),
-    (b"Nullsoft", "NSIS installer data"),
+    (b"NullsoftInst", "NSIS installer"),
     (b"zlb\x1a", "Inno Setup data"),
-    (b"IPC!", "InstallCreator"),
 )
 GO_BUILDINF = b" Go buildinf:"  # appears as "\xff Go buildinf:" or similar in Go PE data
+
+
+def _sniff(blob):
+    """-> labels for magics found in the first 2KB."""
+    head = blob[:2048]
+    hits = [label for magic, label in MAGICS if magic in head]
+    if head[:2] == b"MZ":
+        hits.append("embedded PE")
+    if GO_BUILDINF in head:
+        hits.append("Go buildinfo")
+    return hits
 
 
 def shannon(data):
@@ -30,34 +43,23 @@ def shannon(data):
     return -sum((c / n) * math.log2(c / n) for c in counts if c)
 
 
-def _overlay_region(pe, raw):
-    """-> (start, end) byte range of overlay (after sections, minus cert blob)."""
+def _overlay_regions(pe, raw):
+    """-> list of (start, end) byte ranges forming the overlay
+    (after sections, minus the full certificate chain)."""
     ends = [s.PointerToRawData + s.SizeOfRawData for s in pe.sections if s.PointerToRawData]
     if not ends:
-        return None
-    start = max(ends)
-    end = len(raw)
+        return []
+    start, end = max(ends), len(raw)
+    if start >= end:
+        return []
     try:
-        sec = pe.OPTIONAL_HEADER.DATA_DIRECTORY[4]  # SECURITY: VA is a file offset
-        if sec.VirtualAddress and sec.VirtualAddress > start:
-            cert_end = sec.VirtualAddress + sec.Size
-            if cert_end <= end:
-                # overlay = gap before cert + anything after cert
-                pre = (start, sec.VirtualAddress)
-                post = (cert_end, end) if cert_end < end else ()
-                return pre, post
+        rng = cert_table_range(raw, pe)
+        if rng and rng[0] >= start and rng[1] <= end:
+            # overlay = gap before cert + anything after the full cert chain
+            return [(s, e) for s, e in ((start, rng[0]), (rng[1], end)) if e > s]
     except Exception:
         pass
-    return (start, end)
-
-
-def _sniff(blob):
-    hits = [label for magic, label in MAGICS if blob[:16].startswith(magic)]
-    if blob[:2] == b"MZ":
-        hits.append("embedded PE")
-    if GO_BUILDINF in blob[:4096]:
-        hits.append("Go buildinfo")
-    return hits
+    return [(start, end)]
 
 
 def run(t):
@@ -73,13 +75,12 @@ def run(t):
             out.append(Finding("PACKED?", f"packer section name '{nm}'", "CRITICAL"))
 
     # overlay
-    reg = _overlay_region(pe, t.raw)
-    regions = reg if reg and isinstance(reg[0], tuple) else (reg,) if reg else ()
+    regions = _overlay_regions(pe, t.raw)
     total = sum(e - s for s, e in regions)
     if total > 4096:
         blob = b"".join(t.raw[s:e][:65536] for s, e in regions)
         e = round(shannon(blob), 2)
-        hits = _sniff(t.raw[regions[0][0]:regions[0][0] + 64])
+        hits = _sniff(t.raw[regions[0][0]:regions[0][0] + 2048])
         detail = f"overlay {total:,}B entropy={e}"
         if hits:
             detail += f" starts with: {', '.join(hits)}"
@@ -98,7 +99,7 @@ def run(t):
                 for e in rt.directory.entries:
                     for l in e.directory.entries:
                         try:
-                            blob = pe.get_data(l.data.struct.OffsetToData, min(l.data.struct.Size, 64))
+                            blob = pe.get_data(l.data.struct.OffsetToData, min(l.data.struct.Size, 2048))
                         except Exception:
                             continue
                         hits = _sniff(blob)

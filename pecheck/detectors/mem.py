@@ -158,11 +158,12 @@ def run(t):
     except Exception:
         pass
     # 4) high-entropy non-code sections: attribute .rsrc to icons, flag the rest
+    from .sections import entropy_of
     for s in pe.sections:
         nm = s.Name.rstrip(b"\x00").decode(errors="replace")
-        if s.Misc_VirtualSize < 1024 or s.get_entropy() <= 7.3:
+        if s.Misc_VirtualSize < 1024 or entropy_of(t, s) <= 7.3:
             continue
-        e = round(s.get_entropy(), 2)
+        e = round(entropy_of(t, s), 2)
         if nm == ".rsrc":
             covered = _rsrc_icon_coverage(pe)
             if covered is not None:

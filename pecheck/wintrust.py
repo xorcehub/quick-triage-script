@@ -1,12 +1,51 @@
-"""Authenticode via WinVerifyTrust (pure ctypes, no subprocess)."""
+"""Authenticode via WinVerifyTrust (pure ctypes, no subprocess).
+ABI layouts transcribed from the Windows SDK 10.0.26100 headers
+(wintrust.h, mscat.h, SoftPub.h, wincrypt.h, winerror.h). Digest + chain
+are validated by the Windows trust engine (same as Explorer/PowerShell);
+revocation is NOT checked (offline-safe, no CRL/AIA fetches).
+weak_cert_info() is the fallback when that engine is unavailable (non-Windows)."""
 import os
+import re
+import time
 
 
-# ---- Authenticode via WinVerifyTrust (pure ctypes, no subprocess) ----
-# ABI layouts transcribed from the Windows SDK 10.0.26100 headers
-# (wintrust.h, mscat.h, SoftPub.h, wincrypt.h, winerror.h). Digest + chain
-# are validated by the Windows trust engine (same as Explorer/PowerShell);
-# revocation is NOT checked (offline-safe, no CRL/AIA fetches).
+def weak_cert_info(pe):
+    """Best-effort info from the raw cert blob, NO cryptographic validation.
+    -> (signer strings str, notAfter 'YYYY-MM-DD', expired bool) or None."""
+    try:
+        sec = pe.OPTIONAL_HEADER.DATA_DIRECTORY[4]
+        if not sec.VirtualAddress:
+            return None
+        blob = pe.__data__[sec.VirtualAddress:sec.VirtualAddress + sec.Size]
+    except Exception:
+        return None
+    if not blob:
+        return None
+    # UTCTime YYMMDDHHMMSSZ / GeneralizedTime YYYYMMDDHHMMSSZ
+    times = [m.decode() for m in re.findall(rb"\d{12}Z|\d{14}Z", blob)]
+    notafter, expired = None, False
+    if times:
+        def parse(ts):
+            d = ts[:-1]
+            if len(d) == 12:
+                y = 2000 + int(d[:2]) if int(d[:2]) < 50 else 1900 + int(d[:2])
+                d = f"{y:04d}" + d[2:]
+            return d[:4] + "-" + d[4:6] + "-" + d[6:8]
+        latest = max(times, key=lambda ts: int(ts[:-1]))
+        notafter = parse(latest)
+        y, m, dd = int(notafter[:4]), int(notafter[5:7]), int(notafter[8:10])
+        expired = (y, m, dd) < time.gmtime(time.time())[:3]
+    # candidate org strings: printable runs with a space, plausible length
+    strs = [m.decode("latin-1", "replace") for m in re.findall(rb"[ -~]{6,64}", blob)]
+    orgs = []
+    for s in strs:
+        if " " in s and not any(c.isdigit() for c in s[:4]) and s not in orgs:
+            orgs.append(s)
+        if len(orgs) == 3:
+            break
+    return ("; ".join(orgs), notafter, expired)
+
+
 def sigs_via_wintrust(paths):
     """-> {normcase abspath: (status, signer)} or None if unavailable.
     Covers embedded signatures and OS catalog-signed files."""

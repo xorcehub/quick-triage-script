@@ -14,6 +14,18 @@ def shannon(data):
     return -sum((c / n) * math.log2(c / n) for c in counts if c)
 
 
+ENTROPY_CAP = 4 << 20  # sample cap: packed-vs-normal detection needs no more
+
+
+def entropy_of(t, s):
+    """Cached per-section entropy (sampled to ENTROPY_CAP bytes)."""
+    key = id(s)
+    cache = t.__dict__.setdefault("_entropy", {})
+    if key not in cache:
+        cache[key] = round(shannon(s.get_data()[:ENTROPY_CAP]), 4)
+    return cache[key]
+
+
 def section_table(t):
     """-> [(name, entropy, kb)] for the report."""
     rows = []
@@ -21,9 +33,7 @@ def section_table(t):
         return rows
     for s in t.pe.sections:
         name = s.Name.rstrip(b"\x00").decode(errors="replace")
-        data = s.get_data()[:1 << 20]
-        e = shannon(data) if data else 0.0
-        rows.append((name, round(e, 2), round(s.SizeOfRawData / 1024, 1)))
+        rows.append((name, round(entropy_of(t, s), 2), round(s.SizeOfRawData / 1024, 1)))
     return rows
 
 
@@ -33,8 +43,7 @@ def run(t):
         return out
     for s in t.pe.sections:
         name = s.Name.rstrip(b"\x00").decode(errors="replace")
-        data = s.get_data()[:1 << 20]
-        e = shannon(data) if data else 0.0
+        e = entropy_of(t, s)
         kb = round(s.SizeOfRawData / 1024, 1)
         exec_ = bool(s.Characteristics & 0x20000000)  # IMAGE_SCN_MEM_EXECUTE
         if exec_ and (s.Characteristics & 0x80000000):  # IMAGE_SCN_MEM_WRITE
