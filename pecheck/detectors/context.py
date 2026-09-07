@@ -7,12 +7,15 @@ import re
 
 from ..model import Finding, CRITICAL
 
-SCENE = ("codex", "skidrow", "cpy", "plaza", "hoodlum", "rune", "empress",
-         "tenoke", "fitgirl", "dodi", "rg mechanics", "online-fix", "3dm",
+import re as _re
+SCENE = ("codex", "skidrow", "plaza", "hoodlum", "empress",
+         "tenoke", "fitgirl", "dodi", "online-fix",
          "keygen", "nocd", "crack", "cracked")
+_SCENE_RX = _re.compile(r"\b(?:" + "|".join(_re.escape(s) for s in SCENE) + r")\b")
 REDIST = ("vcredist", "vc_redist", "directx", "dxsetup", "dotnet", "oalinst",
           "ueprereqsetup", "_commonredist")
 EMU_MARKS = (b"goldberg", b"creamapi", b"smartsteamemu", b"spacewar")
+MOD_MARKS = (b"reshade", b"specialk", b"enbseries", b"ultimate asi loader")
 STEAM_API = ("steam_api.dll", "steam_api64.dll")
 SPOOF_FINAL = (".exe", ".dll", ".scr", ".bat", ".cmd", ".ps1", ".jar", ".lnk", ".hta",
                ".vbs", ".js", ".com", ".pif", ".msc")
@@ -34,22 +37,30 @@ def run(t):
         out.append(Finding("EVADE!", f"double extension '{base}': poses as "
                                      f"{stem[stem.rfind('.'):]} file but is {ext}", CRITICAL))
 
-    scene = [m for m in SCENE if any(m in p for p in parts[:-1])]
-    if scene or any(m == parts[-1].rsplit(".", 1)[0] for m in ("keygen", "crack", "nocd")):
-        out.append(Finding("CONTEXT", f"scene/crack marker in path: {scene[0] if scene else base} "
+    if _SCENE_RX.search("/".join(parts[:-1])):
+        m = _SCENE_RX.search("/".join(parts[:-1]))
+        out.append(Finding("CONTEXT", f"scene/crack marker in path: {m.group()} "
                                       "- pirated-release context, raise suspicion of bundled malware"))
 
     if any(r in base for r in REDIST):
         out.append(Finding("CONTEXT", f"'{base}' looks like a known redistributable "
                                       "(verify signature before trusting)"))
 
-    # steam emulator downgrade signal
-    if base in STEAM_API:
-        sibset = set(t.siblings)
+    # context downgrade signals (steam emu / graphics mods ship unsigned proxy DLLs)
+    sibset = set(t.siblings)
+    if base.startswith("steam_api") and base.endswith(".dll"):
         emu_ctx = any(s in sibset for s in ("steam_appid.txt", "steam_settings")) \
             or any(os.path.splitext(s)[1] == ".cfg" and s.startswith("steam_") for s in sibset) \
             or any(m in t.raw for m in EMU_MARKS)
         if emu_ctx:
             out.append(Finding("CONTEXT", "steam emulator pattern (goldberg/creamapi-style "
                                           "steam_api replacement) - proxy-DLL verdict downgraded"))
+    if base in ("dxgi.dll", "d3d9.dll", "d3d11.dll", "d3d12.dll", "dinput8.dll",
+                "winmm.dll", "version.dll"):
+        mod_ctx = any(m in t.raw for m in MOD_MARKS) \
+            or any(s in sibset for s in ("reshade.ini", "enblocal.ini")) \
+            or any(s.endswith(".fx") for s in sibset)
+        if mod_ctx:
+            out.append(Finding("CONTEXT", "graphics/input mod proxy (ReShade/SpecialK/ENB-style) "
+                                          "- proxy-DLL verdict downgraded"))
     return out

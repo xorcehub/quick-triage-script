@@ -2,7 +2,7 @@
 Zero-offset magic wins; PDF/RTF may carry a small prefix (checked in first 1KB).
 Everything unrecognized falls to DATA (unknown binary) or SCRIPT/TEXT via ext.
 Kinds: PE, DOS, ELF, MACHO, ZIP, SEVENZ, RAR, GZIP, XZ, BZIP2, OLE, RTF, PDF,
-LNK, SCRIPT, TEXT, DATA, EMPTY."""
+LNK, SCRIPT, TEXT, MEDIA, DATA, EMPTY."""
 import os
 
 # magic at offset 0 -> kind. Longest match first where prefixes overlap.
@@ -27,6 +27,17 @@ MAGICS = (
     (b"\x4c\x00\x00\x00", "LNK"),        # L + zero HeaderSize
     (b" #@~^", "SCRIPT"),                # encoded VBE/JSE (often BOM-prefixed)
     (b"#@~^", "SCRIPT"),
+    (b"\x89PNG", "MEDIA"),
+    (b"\xff\xd8\xff", "MEDIA"),
+    (b"GIF8", "MEDIA"),
+    (b"BM", "MEDIA"),
+    (b"DDS ", "MEDIA"),
+    (b"OggS", "MEDIA"),
+    (b"RIFF", "MEDIA"),
+    (b"ID3", "MEDIA"),
+    (b"\xff\xfb", "MEDIA"),
+    (b"\xff\xf3", "MEDIA"),
+    (b"\x1aE\xdf\xa3", "MEDIA"),
 )
 
 # magic that may sit anywhere in the first 1KB (formats allowing a prefix)

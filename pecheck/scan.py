@@ -19,7 +19,10 @@ def _scan_target(t, siblings, sig):
     t.siblings = list(siblings)
     pe = t.pe
     if t.error:  # pefile failed on an MZ file: forged/truncated - flag it
-        r.findings.append(Finding("EVADE?", f"PE parse error on MZ image: {t.error}", CRITICAL))
+        sev = "note" if t.truncated else CRITICAL  # big-file cap, not malice
+        r.findings.append(Finding("EVADE?", f"PE parse error on MZ image"
+                                   + (" (analysis capped at 64MB)" if t.truncated else "")
+                                   + f": {t.error}", sev))
     if pe is not None:
         try:
             r.signed = bool(pe.OPTIONAL_HEADER.DATA_DIRECTORY[4].VirtualAddress)  # SECURITY dir

@@ -8,8 +8,8 @@ _HEAD = 1 << 20
 PDF_JS = (b"/JavaScript", b"/JS", b"/OpenAction", b"/AA", b"/Launch",
           b"/EmbeddedFile", b"/RichMedia", b"/URI")
 OLE_MACROS = (b"AutoOpen", b"Auto_Open", b"AutoExec", b"Workbook_Open", b"Document_Open")
-OLE_VERBS = (b"CreateObject", b"URLDownloadToFile", b"powershell", b"Shell ",
-             b"WScript.Shell", b"certutil")
+OLE_VERBS = (b"URLDownloadToFile", b"powershell", b"WScript.Shell",
+             b"certutil", b"Shell.Application", b"Shell ")
 RTF_OBJ = (b"\\objdata", b"\\objautlink", b"\\objupdate", b"{\\object")
 RTF_DDE = (b"\\fldinst", b"DDEAUTO")
 
@@ -21,7 +21,8 @@ def _pdf(t, raw):
     if not hits:
         return out  # clean PDF - silence (a note on every legit PDF is noise)
     js = "/JavaScript" in hits or "/JS" in hits
-    auto = "/Launch" in hits or "/OpenAction" in hits or "/AA" in hits
+    # /AA is field-level (legit form validation); auto-run means /Launch or /OpenAction
+    auto = "/Launch" in hits or "/OpenAction" in hits
     if auto and js:
         out.append(Finding("DOC!", "PDF auto-run (/Launch or /OpenAction) + /JavaScript "
                                    "(classic exploit-doc combo)", CRITICAL))
@@ -51,10 +52,10 @@ def _rtf(t, raw):
     out = []
     objdata = b"\\objdata" in head
     autlink = b"\\objautlink" in head or b"\\objupdate" in head
-    if objdata and (autlink or b"{\\object" in head):
-        out.append(Finding("DOC!", "RTF embedded auto-linked object (\\objdata + object) - near-zero legit use", CRITICAL))
+    if objdata and autlink:  # auto-load semantics; plain objdata = ordinary embedded object
+        out.append(Finding("DOC!", "RTF auto-linked embedded object (\\objdata + autlink) - near-zero legit use", CRITICAL))
     elif objdata:
-        out.append(Finding("DOC?", "RTF \\objdata blob"))
+        out.append(Finding("DOC?", "RTF \\objdata blob (ordinary embedded object unless autlinked)"))
     if b"DDEAUTO" in head and b"\\fldinst" in head:
         out.append(Finding("DOC!", "RTF DDEAUTO field (code execution via field)", CRITICAL))
     return out

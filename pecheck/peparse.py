@@ -84,7 +84,7 @@ def load(path):
         return Target(path=ap, size=0, sha256="", kind="DATA",
                       error=f"unreadable: {type(e).__name__}: {e}")
     k = _kind(ap, raw[:4096])
-    t = Target(path=ap, size=size, sha256=sha, raw=raw, kind=k)
+    t = Target(path=ap, size=size, sha256=sha, raw=raw, kind=k, truncated=size > len(raw))
     if k != "PE":
         return t
     try:
@@ -109,13 +109,14 @@ def collect(root_paths):
         if os.path.isdir(t):
             for dirpath, _, files in os.walk(t):
                 for fn in files:
-                    if ":" in fn:      # NTFS ADS (zone.identifier) - never open
+                    if ":" in fn and os.name == "nt":  # NTFS ADS (zone.identifier)
                         side.append(os.path.join(dirpath, fn))
                         continue
                     low = fn.lower()
                     full = os.path.join(dirpath, fn)
                     if low.endswith(SIDE_EXTS):
                         side.append(full)
+                        continue
                     targets.append(full)
         elif os.path.exists(t):
             targets.append(t)

@@ -15,10 +15,15 @@ _TRAVERSAL = re.compile(r"(^/|\.\./|^[a-zA-Z]:)")
 def _zip(t):
     out = []
     try:
-        zf = zipfile.ZipFile(io.BytesIO(t.raw))
+        # disk file: EOCD lives at the end, beyond the 64MB raw cap on big archives
+        zf = zipfile.ZipFile(t.path)
         infos = zf.infolist()
-    except Exception as e:
-        return [Finding("STRUCT?", f"zip unreadable: {type(e).__name__}")]
+    except Exception:
+        try:  # fall back to the raw prefix (mem/incomplete copies)
+            zf = zipfile.ZipFile(io.BytesIO(t.raw))
+            infos = zf.infolist()
+        except Exception as e:
+            return [Finding("STRUCT?", f"zip unreadable: {type(e).__name__}")]
     exes, scripts, nested, encrypted, bombs, seen_kinds = [], [], [], [], [], []
     for info in infos:
         name = info.filename.replace("\\", "/")
