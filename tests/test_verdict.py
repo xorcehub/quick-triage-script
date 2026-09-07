@@ -43,7 +43,7 @@ class TestVerdict(unittest.TestCase):
 class TestDowngrade(unittest.TestCase):
     def test_steam_emu_downgrades_sideload(self):
         fs = [Finding("SIDELOAD?", "classic sideload name", CRITICAL),
-              Finding("CONTEXT", "steam emulator pattern - downgrade sideload verdict")]
+              Finding("CONTEXT", "steam emulator pattern - proxy-DLL verdict downgraded")]
         out = downgrade(fs)
         sl = next(f for f in out if f.category == "SIDELOAD?")
         self.assertEqual(sl.severity, "note")

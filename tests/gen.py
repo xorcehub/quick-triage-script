@@ -229,7 +229,7 @@ def build_folder(root):
     w("evil.rtf", b"{\\rtf1{\\object\\objautlink{\\*\\objdata 01050000...}}}")
     w("dde.rtf", b"{\\rtf1{\\fldinst DDEAUTO cmd /c calc}}")
     w("macro.doc", b"\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1" + b"\x00" * 8 +
-                  b"AutoOpen" + b"\x00" * 32 + b"CreateObject" + b"\x00" * 32)
+                  b"AutoOpen" + b"\x00" * 32 + b"WScript.Shell" + b"\x00" * 32)
     w("boring.doc", b"\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1" + b"\x00" * 64 + b"ThisDocument")
     _build_zips_data(root, w)
     return root
@@ -254,7 +254,7 @@ def _build_zips_data(root, w):
     os.remove(tmp_pe)
     w("asset.dat", os.urandom(512) + pe + os.urandom(256))          # embedded PE in DATA
     w("encoded.txt", b"hdr\n" + b"QUJDREVG" * 700 + b"\n")          # base64 mammoth
-    w("nosig.bin", os.urandom(300_000))                             # high-entropy DATA
+    w("nosig.bin", b"zz" + os.urandom(300_000))                    # high-entropy DATA (stable kind)
 
     # game-folder context (scene release + steam emu + spoofed name)
     gd = os.path.join(root, "CoolGame-CODEX")

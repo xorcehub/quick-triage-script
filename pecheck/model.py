@@ -23,6 +23,7 @@ class Target:
     sha256: str
     kind: str = "DATA"     # identify.py kind: PE|ELF|ZIP|SCRIPT|PDF|...
     raw: bytes = b""       # first RAW_CAP bytes
+    truncated: bool = False  # size > RAW_CAP: analysis saw only the head
     pe: object = None      # pefile.PE when kind==PE (None on parse error)
     arch: str = None       # x64 | x86 | ARM64 | hex
     error: str = None      # OSError text; PE-parse failure text (kind stays PE)

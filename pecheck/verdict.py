@@ -27,7 +27,7 @@ def verdict(t, findings, sig=None, signed=False, weak_cert=None):
 
 def downgrade(findings):
     """Apply context downgrades: steam-emu CONTEXT downgrades SIDELOAD? crits."""
-    has_emu = any(f.category == "CONTEXT" and "steam emulator" in f.detail for f in findings)
+    has_emu = any(f.category == "CONTEXT" and "verdict downgraded" in f.detail for f in findings)
     if not has_emu:
         return findings
     out = []

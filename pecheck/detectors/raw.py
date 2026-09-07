@@ -8,7 +8,7 @@ from ..model import Finding, CRITICAL
 from .sections import shannon
 
 # kinds where embedded-binary hits are structural (members/segments), not findings
-_SKIP = {"ZIP", "SEVENZ", "RAR", "GZIP", "XZ", "BZIP2", "MACHO", "EMPTY"}
+_SKIP = {"ZIP", "SEVENZ", "RAR", "GZIP", "XZ", "BZIP2", "MACHO", "EMPTY", "MEDIA"}
 _TEXTISH = {"SCRIPT", "TEXT", "LNK", "PDF", "OLE", "RTF"}
 B64_RE = re.compile(rb"[A-Za-z0-9+/]{4096,}")
 HEX_RE = re.compile(rb"[0-9a-fA-F]{8192,}")
@@ -94,7 +94,8 @@ def run(t):
         hexm = HEX_RE.search(t.raw)
         if b64 or hexm:
             which = f"base64 ({len(b64.group()):,}B)" if b64 else f"hex ({len(hexm.group()):,}B)"
-            sev = CRITICAL if t.kind != "TEXT" else "note"  # js bundles legitimately carry long b64
+            # note for TEXT and .js bundles (long data-URIs are stock); critical otherwise
+            sev = "note" if t.kind == "TEXT" or t.ext == ".js" else CRITICAL
             out.append(Finding("OBF", f"{which} mammoth run - encoded payload?", sev))
 
     # windowed entropy on unknown binaries (containers/execs legitimately compress)

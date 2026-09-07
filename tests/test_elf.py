@@ -16,9 +16,8 @@ class TestElfSamples(unittest.TestCase):
     def setUpClass(cls):
         if not gen.GCC:
             raise unittest.SkipTest("gcc not available")
-        cls.dir = os.path.dirname(os.path.abspath(__file__)) + "/../_elfsamples"
-        cls.dir = os.path.abspath(cls.dir)
-        os.makedirs(cls.dir, exist_ok=True)
+        import tempfile
+        cls.dir = tempfile.mkdtemp(prefix="pecheck_elf_")
 
     def sample(self, name):
         p = os.path.join(self.dir, name)

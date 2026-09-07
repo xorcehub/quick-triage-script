@@ -11,7 +11,14 @@ _NORM_WS = re.compile(rb"\s+")
 
 
 def _norm(raw):
-    return _NORM_WS.sub(b"", raw).lower()
+    n = _NORM_WS.sub(b"", raw).lower()
+    if b"\x00" in raw[:512]:  # utf-16le saves: decode so markers still match
+        try:
+            u16 = raw.decode("utf-16le", errors="ignore").encode("latin-1", "ignore")
+            n += _NORM_WS.sub(b"", u16).lower()
+        except Exception:
+            pass
+    return n
 
 
 def _hits(norm, pats):
