@@ -190,6 +190,16 @@ class TestScripts(CorpusTest):
         r = self.report("good.url")
         self.assertNotEqual(r.verdict, "REVIEW")
 
+    def test_url_unc_icon_leak_note(self):
+        r = self.report("uncicon.url")
+        self.assertEqual(r.verdict, "note")   # lure-worthy but not REVIEW
+        self.assertTrue(any("UNC" in f.detail for f in r.findings))
+
+    def test_lnk_unc_leak_note(self):
+        # game.lnk targets a local exe - no UNC - stays clean
+        r = self.report("game.lnk")
+        self.assertFalse(any("UNC" in f.detail for f in r.findings))
+
     def test_lnk_powershell_args_review(self):
         crit, v = self.crit("readme.lnk")
         self.assertEqual(v, "REVIEW")

