@@ -1,8 +1,11 @@
 """Raw-bytes heuristics for ANY file kind: embedded executables (validated),
 embedded container magics in text-ish files, base64/hex mammoths, unexplained
-high entropy, stealer-family escalation."""
+high entropy, compressed-stream probing, stealer-family escalation."""
+import bz2
+import lzma
 import re
 import struct
+import zlib
 
 from ..model import Finding, CRITICAL
 from .sections import shannon
@@ -60,6 +63,95 @@ def _scan_execs(t):
     return pes, elfs
 
 
+_STREAM_CAP = 64 << 20     # ponytail: scan window; raise for dump-like inputs
+_FEED = 256 << 10          # bytes fed per decompression attempt
+_MIN_OUT = 512             # smaller successful inflates are noise, not signal
+_MAX_TRIES = 512           # decompression attempts per codec (FP-offset budget)
+
+
+def _try_stream(codec, blob):
+    """-> (produced, output head) on successful decompression, else None.
+    Validation IS the decompression - magic bytes only nominate candidates."""
+    try:
+        if codec == "zlib/gzip":
+            out = zlib.decompressobj(wbits=47).decompress(blob)  # auto zlib|gzip
+        elif codec == "xz":
+            out = lzma.LZMADecompressor(format=lzma.FORMAT_AUTO).decompress(blob)
+        else:
+            out = bz2.BZ2Decompressor().decompress(blob)
+    except Exception:
+        return None
+    if len(out) < _MIN_OUT:
+        return None
+    return out
+
+
+def _candidates(raw, codec):
+    """-> offsets of plausible stream starts (magic only nominates; decompression gates)."""
+    out, i, tries = [], 0, 0
+    if codec == "zlib/gzip":
+        while len(out) < _MAX_TRIES:
+            g = raw.find(b"\x1f\x8b\x08", i)
+            z = raw.find(b"\x78", i)
+            if g == -1 and z == -1:
+                break
+            if z == -1 or (g != -1 and g < z):
+                out.append(g)
+                i = g + 3
+            elif z + 1 < len(raw) and ((raw[z] << 8) | raw[z + 1]) % 31 == 0:
+                out.append(z)  # CMF/FLG checksum-valid zlib header
+                i = z + 2
+            else:
+                i = z + 1
+    elif codec == "xz":
+        while len(out) < _MAX_TRIES:
+            i = raw.find(b"\xfd7zXZ\x00", i)
+            if i < 0:
+                break
+            out.append(i)
+            i += 6
+    else:
+        while len(out) < _MAX_TRIES:
+            i = raw.find(b"BZh", i)
+            if i < 0 or i + 3 >= len(raw):
+                break
+            if 0x31 <= raw[i + 3] <= 0x39:
+                out.append(i)
+            i += 3
+    return out
+
+
+def _prober(t):
+    """DATA/TEXTISH kinds: find really-decompresses streams, sniff the output."""
+    raw = t.raw[:_STREAM_CAP]
+    if len(raw) < 2048:
+        return []
+    out, hits = [], 0
+    for codec in ("zlib/gzip", "xz", "bzip2"):
+        for off in _candidates(raw, codec):
+            got = _try_stream(codec, raw[off:off + _FEED])
+            if got is None:
+                continue
+            hits += 1
+            what = None
+            if got[:2] == b"MZ" and _valid_pe_at(got, 0):
+                what = "a PE executable"
+            elif got[:4] == b"\x7fELF" and _valid_elf_at(got, 0):
+                what = "an ELF executable"
+            elif got[:2] == b"#!":
+                what = "a script (#!)"
+            detail = f"{codec} stream at offset {off:#x}: {len(raw[off:off + _FEED]):,}B fed -> {len(got):,}B"
+            if what:
+                out.append(Finding("EMBED", f"decompressed payload contains {what} "
+                                            f"({detail})", CRITICAL))
+            else:
+                out.append(Finding("OBF", f"decompressible {detail} "
+                                          "(embedded compressed blob?)"))
+            if hits >= 3:
+                return out  # one confirmation is signal, five is noise
+    return out
+
+
 def run(t):
     if not t.raw or t.kind in _SKIP:
         return []
@@ -98,6 +190,10 @@ def run(t):
             # note for TEXT and .js bundles (long data-URIs are stock); critical otherwise
             sev = "note" if t.kind == "TEXT" or t.ext == ".js" else CRITICAL
             out.append(Finding("OBF", f"{which} mammoth run - encoded payload?", sev))
+
+    # compressed-stream prober: "fake text/image with appended payload" pattern
+    if t.kind == "DATA" or t.kind in _TEXTISH:
+        out += _prober(t)
 
     # windowed entropy on unknown binaries (containers/execs legitimately compress)
     if t.kind == "DATA" and len(t.raw) > 32768:
