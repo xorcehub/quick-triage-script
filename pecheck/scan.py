@@ -3,6 +3,7 @@ ALL detectors are PE-only (self-gated); GENERIC detectors run on every file
 kind. Cross-file signals (duplicates, near-identical twins) run after the
 per-file pass. Verdict logic lives in verdict.py."""
 import os
+from collections import defaultdict
 
 from . import peparse
 from .model import FileReport, Finding, ScanResult, CRITICAL
@@ -17,6 +18,7 @@ def _scan_target(t, siblings, sig):
         r.verdict = "error"       # unreadable (OSError) - PE-parse errors fall through
         return r
     t.siblings = list(siblings)
+    t.sig = sig
     pe = t.pe
     if t.error:  # pefile failed on an MZ file: forged/truncated - flag it
         sev = "note" if t.truncated else CRITICAL  # big-file cap, not malice
@@ -84,7 +86,6 @@ def scan_targets(paths, use_sigs=True):
             meta[t.path] = (t.size, t.pe.FILE_HEADER.TimeDateStamp, t.sha256)
         reports.append(rep)
     # near-identical twins: same size + same compile timestamp, different content
-    from collections import defaultdict
     groups = defaultdict(list)
     for p, (size, tds, sha) in meta.items():
         if size and tds:
