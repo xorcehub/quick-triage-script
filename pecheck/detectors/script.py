@@ -326,6 +326,15 @@ def run(t):
         return _lnk(t, t.raw) + _b64peek(t.raw)
     if t.ext in (".html", ".htm", ".mht", ".xhtml"):  # kind TEXT: html smuggling is script territory
         return _html(t, t.raw, _norm(t.raw))
+    if t.kind == "TEXT":  # renamed scripts: extension lies, content doesn't
+        head = t.raw[:256]
+        if head[:2] == b"#!":  # shebang -> route by interpreter (default sh)
+            h = _py if b"python" in head.splitlines()[0] else _sh
+            n = _norm(t.raw)
+            return h(t, t.raw, n) + _persist(n)
+        if b"<?php" in head:
+            return _php(t, t.raw, _norm(t.raw))
+        return []
     if t.kind != "SCRIPT":
         return []
     norm = _norm(t.raw)

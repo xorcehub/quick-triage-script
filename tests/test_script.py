@@ -102,6 +102,21 @@ class TestScripts(CorpusTest):
         self.assertEqual(v, "REVIEW")
         self.assertTrue(any("smuggling" in d for d in crit))
 
+    def test_renamed_shell_script_review(self):
+        crit, v = self.crit("renamed.sh.txt")
+        self.assertEqual(v, "REVIEW")
+        self.assertTrue(any("piped straight into shell" in d for d in crit))
+
+    def test_renamed_python_script_review(self):
+        crit, v = self.crit("renamed.py.txt")
+        self.assertEqual(v, "REVIEW")
+        self.assertTrue(any("download" in d.lower() for d in crit))
+
+    def test_renamed_php_review(self):
+        crit, v = self.crit("renamed.php.txt")
+        self.assertEqual(v, "REVIEW")
+        self.assertTrue(any("webshell" in d for d in crit))
+
     def test_php_webshell_review(self):
         crit, v = self.crit("shell.php")
         self.assertEqual(v, "REVIEW")
