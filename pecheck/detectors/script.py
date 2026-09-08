@@ -13,6 +13,7 @@ import struct
 import zlib
 
 from ..model import Finding, CRITICAL
+from .strings import URL_RE
 
 PY_DL = (b"urllib.request", b"urlopen", b"requests.get", b"requests.post",
          b"socket.socket", b"http.client")
@@ -62,6 +63,16 @@ def _norm(raw):
     return n
 
 
+_VENDOR_URL_OK = (b"chocolatey.org", b"powershellgallery.com", b"aka.ms", b"microsoft.com")
+
+
+def _vendor_only(raw):
+    """True when every http(s) url in the text is a known software-vendor host
+    (choco/winget/psgallery installers legitimately do iex+downloadstring)."""
+    urls = URL_RE.findall(raw)
+    return bool(urls) and all(any(v in u.lower() for v in _VENDOR_URL_OK) for u in urls)
+
+
 def _hits(norm, pats):
     return [p.decode() for p in pats if p in norm]
 
@@ -85,10 +96,9 @@ BAT_BAD = ((b"powershell", b"-enc", b"-ec", b"-encodedcommand", b"-w1", b"-whidd
            (b"regsvr32", b"/i:"),
            (b"rundll32", b"javascript:"),
            (b"regadd", b"currentversion\\run"),
-           (b"curl", b"http"), (b"wget", b"http"),
-           # PS one-liner body invoked from bat (-c/-command): powershell + exec/dl token
-           (b"powershell", b"iex", b"invoke-expression", b"downloadstring", b"downloadfile",
-            b"net.webclient", b"frombase64string"))
+           (b"curl", b"http"), (b"wget", b"http"))
+PS_INLINE = (b"powershell", b"iex", b"invoke-expression", b"downloadstring", b"downloadfile",
+             b"net.webclient", b"frombase64string")  # one-liner body from bat (-c/-command)
 VBS_NET = (b"msxml2.xmlhttp", b"winhttp.winhttprequest", b"msxml2.serverxmlhttp", b"adodb.stream")
 VBS_EX = (b"savetofile", b".run(", b"shellexecute", b"wscript.shell", b"createobject(")
 LNK_BAD = (b"powershell", b"cmd.exe", b"-enc", b"-ec", b"-encodedcommand", b"whidden",
@@ -245,7 +255,7 @@ def _html(t, raw, norm):
 def _ps1(t, raw, norm):
     out = []
     dl, ex, dec = _hits(norm, PS_DL), _hits(norm, PS_EX), _hits(norm, PS_DEC)
-    if dl and ex:
+    if dl and ex and not _vendor_only(raw):
         out.append(Finding("SCRIPT!", "powershell download+execute: " + ", ".join(dl[:3]) + " + " + ex[0], CRITICAL))
     elif dec and ex:
         out.append(Finding("SCRIPT!", "powershell decode+execute: " + dec[0] + " + " + ex[0], CRITICAL))
@@ -262,11 +272,16 @@ def _ps1(t, raw, norm):
 
 
 def _bat(t, raw, norm):
+    if _vendor_only(raw):  # vendor installers legitimately carry ps flags + iex
+        return []
     out = []
     for group in BAT_BAD:
         h = _hits(norm, group)
         if len(h) >= 2:
             out.append(Finding("SCRIPT!", "batch dropper combo: " + " + ".join(h[:3]), CRITICAL))
+    if len(_hits(norm, PS_INLINE)) >= 2:
+        out.append(Finding("SCRIPT!", "batch powershell one-liner: "
+                           + " + ".join(_hits(norm, PS_INLINE)[:3]), CRITICAL))
     return out
 
 

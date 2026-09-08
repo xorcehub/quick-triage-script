@@ -48,6 +48,11 @@ class TestScripts(CorpusTest):
         self.assertEqual(r.verdict, "note")
         self.assertTrue(any("staged binary" in f.detail for f in r.findings))
 
+    def test_vendor_installer_scripts_not_review(self):
+        for name in ("choco.bat", "choco.ps1"):
+            r = self.report(name)
+            self.assertNotEqual(r.verdict, "REVIEW", name)
+
     def test_sibling_reference_note(self):
         r = self.report("launch.bat")
         self.assertEqual(r.verdict, "note")   # note-level, not REVIEW
@@ -175,7 +180,7 @@ class TestScripts(CorpusTest):
     def test_bat_ps_one_liner_review(self):
         crit, v = self.crit("oneliner.bat")
         self.assertEqual(v, "REVIEW")
-        self.assertTrue(any("batch dropper combo" in d for d in crit))
+        self.assertTrue(any("batch powershell one-liner" in d for d in crit))
 
     def test_hex_payload_review(self):
         crit, v = self.crit("hexpeek.ps1")
