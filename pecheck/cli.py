@@ -109,7 +109,7 @@ def _ask_filter(inv=None):
     print("    1) Everything        (recommended - malware hides in odd extensions)")
     for k, (name, exts) in _EXT_GROUPS.items():
         print(f"    {k}) {name:16} {' '.join(exts)}")
-    print("    6) Custom            type extensions, e.g. exe, dll")
+    print("    6) Custom            select extensions, e.g. exe, dll")
     print("\n  Choose 1-6 or combine like 2,4 [1]: ", end="", flush=True)
     choice = input().strip().lower()
     if not choice or choice == "1":
