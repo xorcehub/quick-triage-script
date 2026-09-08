@@ -26,8 +26,23 @@ def _norm_exts(s):
                                            for p in s.replace(",", " ").split()) if e}))
 
 
-def _ask_filter():
-    """Interactive extension picker. -> (exts or None, label or None).
+def _ext_inventory(targets):
+    """{ext: count} across the directory targets (metadata-only walk, no reads)."""
+    from collections import Counter
+    counts = Counter()
+    for t in targets:
+        if os.path.isdir(t):
+            for _, _, files in os.walk(t):
+                for fn in files:
+                    ext = os.path.splitext(fn)[1].lower()
+                    if ext:
+                        counts[ext] += 1
+    return counts
+
+
+def _ask_filter(inv=None):
+    """Interactive extension picker. inv: {ext: count} inventory of the target
+    tree, shown at option 6. -> (exts or None, label or None).
     Enter/1 -> None (scan everything - malware hides in odd extensions)."""
     print("\n  pecheck - what should this pass cover?\n")
     print("    1) Everything        (recommended - malware hides in odd extensions)")
@@ -43,7 +58,15 @@ def _ask_filter():
         if part in _EXT_GROUPS:
             picked.append(_EXT_GROUPS[part])
         elif part == "6":
-            print("    extensions (comma-separated): ", end="", flush=True)
+            if inv:
+                items = sorted(inv.items(), key=lambda kv: -kv[1])
+                shown, rest = items[:20], len(items) - 20
+                print("    extensions present in the folder:")
+                for i in range(0, len(shown), 6):
+                    print("      " + "  ".join(f"{e} x{n}" for e, n in shown[i:i + 6]))
+                if rest > 0:
+                    print(f"      ... and {rest} more")
+            print("    extensions to scan (comma-separated): ", end="", flush=True)
             custom.extend(_norm_exts(input()))
         else:
             print(f"    (ignoring '{part}')")
@@ -214,7 +237,7 @@ def main(argv=None):
         # wizard: interactive TTY + directory target + no explicit filter + human output
         if (exts is None and not args.json and not args.quiet and sys.stdin.isatty()
                 and any(os.path.isdir(t) for t in args.targets)):
-            exts, names = _ask_filter()
+            exts, names = _ask_filter(_ext_inventory(args.targets))
             if exts:
                 print(f"  -> scanning {names} only - others skipped, not cleared", flush=True)
         result = scan_targets(args.targets, use_sigs=not args.no_sigs,

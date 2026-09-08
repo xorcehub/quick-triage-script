@@ -110,6 +110,31 @@ class TestCliJson(CorpusTest):
         finally:
             builtins.input = real_input
 
+    def test_wizard_custom_shows_folder_inventory(self):
+        import builtins
+        from pecheck.cli import _ask_filter, _ext_inventory
+        clean = os.path.join(self.dir, "invdir")
+        os.makedirs(clean, exist_ok=True)
+        for fn in ("a.txt", "b.txt", "c.exe"):
+            open(os.path.join(clean, fn), "w").write("x")
+        inv = _ext_inventory([clean])
+        self.assertEqual(dict(inv), {".txt": 2, ".exe": 1})
+        answers = iter(["6", "txt"])
+        real_input = builtins.input
+        out = io.StringIO()
+        try:
+            builtins.input = lambda *a: next(answers)
+            import contextlib as _cl
+            with _cl.redirect_stdout(out):
+                exts, names = _ask_filter(inv)
+        finally:
+            builtins.input = real_input
+        self.assertIn(".txt x2", out.getvalue())
+        self.assertIn(".exe x1", out.getvalue())
+        self.assertEqual((exts, names), ((".txt",), "custom"))
+        finally:
+            builtins.input = real_input
+
     def test_human_summary_mentions_rollup_and_review(self):
         out = io.StringIO()
         with contextlib.redirect_stdout(out), contextlib.redirect_stderr(io.StringIO()):
