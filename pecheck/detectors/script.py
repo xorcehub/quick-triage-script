@@ -178,11 +178,24 @@ def _hta(t, raw, norm):
     return out
 
 
+_REG_HIJACKS = (  # (label, tokens that must all be present in norm)
+    ("Winlogon Shell hijack", (b"currentversion\\winlogon", b"shell=")),
+    ("Winlogon UserInit hijack", (b"currentversion\\winlogon", b"userinit=")),
+    ("AppInit_DLLs hijack", (b"appinit_dlls=")),
+    ("service ImagePath hijack", (b"currentcontrolset\\services", b"imagepath=")),
+    ("Active Setup StubPath", (b"stubpath=")),
+)
+
+
 def _reg(t, raw, norm):
+    out = []
     if b"[hkey_current_user\\software\\microsoft\\windows\\currentversion\\run" in norm \
             or b"[hkey_local_machine\\software\\microsoft\\windows\\currentversion\\run" in norm:
-        return [Finding("PERSIST!", ".reg file writes Run key", CRITICAL)]
-    return []
+        out.append(Finding("PERSIST!", ".reg file writes Run key", CRITICAL))
+    for label, marks in _REG_HIJACKS:
+        if all(m in norm for m in marks):
+            out.append(Finding("PERSIST!", ".reg writes " + label, CRITICAL))
+    return out
 
 
 def _url(t, raw, norm):

