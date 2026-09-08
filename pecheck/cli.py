@@ -151,6 +151,8 @@ def main(argv=None):
                     help="extract archives/installers and re-scan members (needs 7z for non-zip)")
     ap.add_argument("--max-depth", type=int, default=1, metavar="N",
                     help="container nesting levels to extract with --unpack (default 1)")
+    ap.add_argument("--no-history", action="store_true",
+                    help="skip the local scan-history sidecar (~/.config/pecheck/history.json)")
     ap.add_argument("--quiet", action="store_true", help="summary only (suppresses per-file blocks and progress)")
     args = ap.parse_args(argv)
 
@@ -160,7 +162,8 @@ def main(argv=None):
         pass
 
     result = scan_targets(args.targets, use_sigs=not args.no_sigs,
-                          unpack=args.unpack, max_depth=args.max_depth)
+                          unpack=args.unpack, max_depth=args.max_depth,
+                          use_history=not args.no_history)
     if args.unpack and not any(__import__("shutil").which(b) for b in ("7z", "7za", "7zr")):
         print("note: 7z not on PATH - --unpack handled zip containers only "
               "(install 7-zip for rar/7z/iso/cab/installer support)", file=sys.stderr)

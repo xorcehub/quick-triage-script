@@ -139,7 +139,7 @@ def _unpack_pass(parents, use_sigs, max_depth, seen, depth=0):
     return added
 
 
-def scan_targets(paths, use_sigs=True, unpack=False, max_depth=1):
+def scan_targets(paths, use_sigs=True, unpack=False, max_depth=1, use_history=True):
     """-> ScanResult over all targets (dirs are walked; every file is scanned).
     Deduplicates identical files, flags near-identical twins (same size +
     TimeDateStamp, different bytes - PE only). unpack: extract containers and
@@ -149,4 +149,7 @@ def scan_targets(paths, use_sigs=True, unpack=False, max_depth=1):
     reports = _scan_list(targets, sibs, _sig_map(targets, use_sigs), seen)
     if unpack:
         reports += _unpack_pass(reports, use_sigs, max_depth, seen)
+    if use_history and reports:
+        from . import history
+        history.save(history.record(reports))
     return ScanResult(reports=reports, side_files=side, folders=_rollup(reports, side))
