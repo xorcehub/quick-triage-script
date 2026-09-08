@@ -16,6 +16,12 @@ def shannon(data):
 
 ENTROPY_CAP = 4 << 20  # sample cap: packed-vs-normal detection needs no more
 
+# names that routinely show up in normal toolchain output
+_COMMON_NAMES = {".text", ".code", ".itext", ".data", ".bss", ".rdata", ".idata",
+                ".edata", ".rsrc", ".reloc", ".tls", ".pdata", ".xdata", ".crt",
+                ".didat", ".textbss", ".gcc_except", ".CRT", ".RLINK", "CODE", "DATA",
+                "BSS", ".fasm", ".ambk", "INIT", "UPX0", "UPX1", "UPX2"}
+
 
 def entropy_of(t, s):
     """Cached per-section entropy (sampled to ENTROPY_CAP bytes)."""
@@ -47,7 +53,11 @@ def run(t):
         kb = round(s.SizeOfRawData / 1024, 1)
         exec_ = bool(s.Characteristics & 0x20000000)  # IMAGE_SCN_MEM_EXECUTE
         if exec_ and (s.Characteristics & 0x80000000):  # IMAGE_SCN_MEM_WRITE
-            out.append(Finding("EVADE?", f"section {name} is writable+executable"))
+            if name.lower() not in _COMMON_NAMES:
+                out.append(Finding("EVADE?", f"section {name} is writable+executable "
+                                             "(non-standard section name)"))
+            else:
+                out.append(Finding("EVADE?", f"section {name} is writable+executable"))
         if exec_ and e > 7.5 and kb > 10:
             out.append(Finding("PACKED?", f"executable section {name} entropy {round(e, 2)} (packed/shellcode?)", CRITICAL))
     return out

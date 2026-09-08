@@ -51,6 +51,10 @@ def _overlay_regions(pe, raw):
     return [(start, end)]
 
 
+def _nm(s):
+    return s.Name.rstrip(b"\x00").decode(errors="replace")
+
+
 def run(t):
     if t.error or t.pe is None:
         return []
@@ -96,6 +100,28 @@ def run(t):
                             out.append(Finding("PACKED?", f"resource type {getattr(rt, 'id', '?')} contains {', '.join(hits)}"))
         except Exception:
             pass
+
+    # overlapping raw ranges: parser-confusion / SFX-packing class
+    mapped = sorted((s for s in pe.sections if s.PointerToRawData and s.SizeOfRawData),
+                    key=lambda s: s.PointerToRawData)
+    for a, b in zip(mapped, mapped[1:]):
+        if b.PointerToRawData < a.PointerToRawData + a.SizeOfRawData:
+            out.append(Finding("EVADE?", f"sections overlap raw ranges: "
+                                         f"{_nm(a)} and {_nm(b)} cover the same file bytes"))
+            break
+
+    # header CheckSum wrong - only meaningful on signed binaries (unsigned
+    # installers ship zero/stale checksums routinely; the cert gate kills the FP)
+    try:
+        dirs = pe.OPTIONAL_HEADER.DATA_DIRECTORY
+        hdr_sum = pe.OPTIONAL_HEADER.CheckSum
+        if hdr_sum and len(dirs) > 4 and dirs[4].VirtualAddress:
+            calc = pe.generate_checksum()
+            if calc and calc != hdr_sum:
+                out.append(Finding("STRUCT?", f"header CheckSum {hdr_sum:#x} != computed "
+                                              f"{calc:#x} on a signed image (edited after signing?)"))
+    except Exception:
+        pass
 
     # entry-point placement
     ep = pe.OPTIONAL_HEADER.AddressOfEntryPoint
