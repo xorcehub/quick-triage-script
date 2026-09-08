@@ -76,6 +76,7 @@ _PEEK_TOKENS = (b"powershell", b"cmd.exe", b"http://", b"https://", b"invoke-exp
 _B64_RUN = re.compile(rb"[A-Za-z0-9+/]{120,}={0,2}")
 _HEX_RUN = re.compile(rb"(?:[0-9a-fA-F]{2}){80,}")   # >=80 encoded bytes
 _DEC_ARR = re.compile(rb"\d{1,3}(?:,\s*\d{1,3}){24,}")  # PS [char[]](104,116,...) style
+_B64_FRAG = re.compile(rb"[A-Za-z0-9+/]{20,}={0,2}")       # pieces of a split payload
 
 
 def _inflate(dec):
@@ -105,6 +106,12 @@ def _decoded_runs(raw):
     for m in list(_DEC_ARR.finditer(raw))[:3]:
         try:
             yield "decimal", bytes(int(x) for x in m.group().split(b","))
+        except Exception:
+            pass
+    joined = b"".join(_B64_FRAG.findall(raw))  # chunk-split payload: reassemble, try once
+    if len(joined) >= 160:
+        try:
+            yield "base64-joined", base64.b64decode(joined + b"=" * (-len(joined) % 4))
         except Exception:
             pass
 

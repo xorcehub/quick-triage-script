@@ -157,6 +157,11 @@ class TestScripts(CorpusTest):
         self.assertEqual(v, "REVIEW")
         self.assertTrue(any("decoded hex payload" in d for d in crit))
 
+    def test_chunked_b64_reassembly_review(self):
+        crit, v = self.crit("chunkedb64.ps1")
+        self.assertEqual(v, "REVIEW")
+        self.assertTrue(any("decoded base64-joined payload" in d for d in crit))
+
     def test_decimal_array_payload_review(self):
         crit, v = self.crit("decpeek.js")
         self.assertEqual(v, "REVIEW")
