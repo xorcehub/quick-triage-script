@@ -4,7 +4,7 @@ PEs with identical hit sets (all families only match runs >= 6 printable chars).
 Mutexes/pipe names are displayed, not scored. No base64-blob scoring (FP machine)."""
 import re
 
-from ..model import Finding
+from ..model import Finding, CRITICAL, NOTE
 from ..peparse import cert_table_range
 
 MIN_LEN = 6
@@ -15,6 +15,10 @@ URL_RE = re.compile(rb"(?:https?|ftp)://[A-Za-z0-9\-._~:/?#\[\]@!$&()*+,;=%]{4,}
 IP_RE = re.compile(rb"\b(?:(?:25[0-5]|2[0-4]\d|1?\d?\d)\.){3}(?:25[0-5]|2[0-4]\d|1?\d?\d)\b")
 RUNKEY_RE = re.compile(rb"[Ss]oftware\\[Mm]icrosoft\\[Ww]indows\\[Cc]urrent[Vv]ersion\\[Rr]un\w*")
 MUTEX_RE = re.compile(rb"(?:[Gg]lobal|[Ll]ocal)\\[A-Za-z0-9_.\-{}]{4,}|\\\\\.\\pipe\\[A-Za-z0-9_]{4,}")
+WEBHOOK_RE = re.compile(
+    rb"(?:https?://(?:[a-z0-9-]+\.)*discord(?:app)?\.com/api/webhooks/[A-Za-z0-9%/_-]+"
+    rb"|https?://api\.telegram\.org/bot[A-Za-z0-9:_-]+"
+    rb"|https?://hooks\.slack\.com/services/[A-Za-z0-9/_-]+)", re.I)
 STEALER_RE = re.compile(
     rb"(?:AppData\\Roaming\\(?:discord|telegram)"
     rb"|AppData\\Local\\(?:Google\\Chrome|Microsoft\\Edge|BraveSoftware|Opera)"
@@ -73,6 +77,18 @@ def run(t):
             out.append(Finding("STR", "urls: " + ", ".join(show) + (f" (+{len(sus)-5} more)" if len(sus) > 5 else "")))
         else:
             out.append(Finding("STR", f"{len(urls)} url(s), all known-vendor (cert/doc links)"))
+    # exfil-capable webhooks: rare-but-review-worthy in binaries, plausible in scripts;
+    # NUL-stripped corpus catches UTF-16LE-stored configs (common in real samples)
+    corpus_nc = corpus.replace(b"\x00", b"")
+    hooks = sorted({h.decode("latin-1", "replace") for h in
+                    WEBHOOK_RE.findall(corpus) + WEBHOOK_RE.findall(corpus_nc)})
+    if hooks:
+        crit = t.kind in ("PE", "ELF", "MACHO") and not (t.sig and t.sig[0] == "Valid")
+        out.append(Finding("STR!" if crit else "STR?",
+                           "exfil webhook (discord/telegram/slack): "
+                           + ", ".join(h[:80] for h in hooks[:2])
+                           + (f" (+{len(hooks) - 2} more)" if len(hooks) > 2 else ""),
+                           CRITICAL if crit else NOTE))
     ips = {i.decode() for i in IP_RE.findall(corpus)}
     ips = {i for i in ips if not i.startswith(("0.", "255.", "127.")) and not i.endswith((".0", ".255"))}
     # ASN.1 OIDs (2.5.4.3 etc) masquerade as IPs; real public IPs rarely have all-small octets

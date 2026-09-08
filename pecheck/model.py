@@ -27,6 +27,8 @@ class Target:
     pe: object = None      # pefile.PE when kind==PE (None on parse error)
     arch: str = None       # x64 | x86 | ARM64 | hex
     error: str = None      # OSError text; PE-parse failure text (kind stays PE)
+    sig: tuple = None       # wintrust result (status, signer); set before detectors run
+    motw: dict = None       # parsed Zone.Identifier ADS (MOTW) - zone/host/referrer/time
     siblings: list = field(default_factory=list)  # lowercase basenames of other files in same dir
 
     @property
@@ -51,6 +53,9 @@ class FileReport:
     sections: list = field(default_factory=list)   # (name, entropy, kb)
     findings: list = field(default_factory=list)   # [Finding]
     verdict: str = None             # REVIEW | note | ok | unsigned/unknown | error
+    imphash: str = None             # pefile import hash (PE only, "" on failure)
+    motw: dict = None               # parsed Zone.Identifier ADS (any kind)
+    parent: str = None              # archive this file was extracted from (--unpack)
     weak_cert: tuple = None         # (signer strings, notAfter str) when sig check unavailable
     duplicate_of: str = None        # path of the byte-identical file we deduped against
 
@@ -64,7 +69,6 @@ class FileReport:
 
     def to_dict(self):
         d = asdict(self)
-        d.pop("crit", None)
         d["findings"] = [{"severity": f.severity, "category": f.category, "detail": f.detail}
                          for f in sorted(self.findings, key=lambda f: (f.severity != CRITICAL,))]
         if self.sig is not None:
@@ -90,6 +94,7 @@ class ScanResult:
     reports: list
     side_files: list = field(default_factory=list)
     folders: list = field(default_factory=list)          # [FolderRollup]
+    skipped: int = 0                                     # extension-filtered, no verdict
 
     def __iter__(self):
         return iter(self.reports)

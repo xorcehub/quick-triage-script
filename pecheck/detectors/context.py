@@ -1,5 +1,6 @@
 """Game-folder context: scene/piracy markers, steam emulators, redist names,
-double-extension spoofs. Context beats filename heuristics, valid signature
+double-extension and bidi spoofs, executable-behind-decoy-extension disguises.
+Context beats filename heuristics, valid signature
 beats context (wintrust path, N/A off-Windows). Emits notes + one targeted
 downgrade signal (steam-emu) consumed by scan.py."""
 import os
@@ -22,6 +23,15 @@ SPOOF_FINAL = (".exe", ".dll", ".scr", ".bat", ".cmd", ".ps1", ".jar", ".lnk", "
 SPOOF_DECOY = (".pdf", ".doc", ".docx", ".txt", ".jpg", ".png", ".gif", ".xlsx",
                ".pptx", ".mp3", ".mp4", ".avi", ".zip")
 _TRAIL = re.compile("|".join(re.escape(e) + r"$" for e in SPOOF_DECOY))
+# kind -> label when executable content sits behind a decoy extension (icon spoof)
+EXEC_KINDS = {"PE": "PE executable", "ELF": "ELF executable", "MACHO": "Mach-O executable"}
+# bidi overrides + isolates: 'love\u202egnp.jpg' renders as 'lovejpg.png' - real ext hidden
+_BIDI = ("\u202e", "\u202d", "\u2066", "\u2067", "\u2068", "\u2069")
+
+
+def _plausible_dos(raw):
+    """MZ without PE sig: require a sane e_lfanew so two random bytes can't trip us."""
+    return len(raw) >= 0x40 and 0 < int.from_bytes(raw[0x3c:0x40], "little") < 0x1000
 
 
 def run(t):
@@ -36,6 +46,22 @@ def run(t):
     if ext in SPOOF_FINAL and _TRAIL.search(stem):
         out.append(Finding("EVADE!", f"double extension '{base}': poses as "
                                      f"{stem[stem.rfind('.'):]} file but is {ext}", CRITICAL))
+
+    # executable content hiding behind a document/media extension (icon spoof)
+    if ext in SPOOF_DECOY:
+        label = EXEC_KINDS.get(t.kind) or (
+            "DOS MZ executable" if t.kind == "DOS" and _plausible_dos(t.raw) else None)
+        if label:
+            out.append(Finding("EVADE!", f"content mismatch: {label} disguised as {ext} file",
+                               CRITICAL))
+
+    # bidi override chars: displayed filename lies about the real extension
+    if any(c in t.basename for c in _BIDI):
+        shown = t.basename
+        for c in _BIDI:
+            shown = shown.replace(c, "\\u%04x" % ord(c))
+        out.append(Finding("EVADE!", f"bidi override char in filename '{shown}': "
+                                     "displayed name lies about the real extension", CRITICAL))
 
     if _SCENE_RX.search("/".join(parts[:-1])):
         m = _SCENE_RX.search("/".join(parts[:-1]))

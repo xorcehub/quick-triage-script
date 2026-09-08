@@ -5,6 +5,7 @@ loaded - ponytail: raise RAW_CAP if dump-like inputs need full bytes)."""
 import hashlib
 import os
 import struct
+import sys
 
 import pefile
 
@@ -72,6 +73,39 @@ _PARSE_DIRS = [0, 1, 2, 6, 9, 13]
 
 _ARCH = {0x8664: "x64", 0x14C: "x86", 0xAA64: "ARM64"}
 
+_ZONE_KEYS = ("zoneid", "hosturl", "referrerurl", "downloadtime")
+
+
+def parse_motw(data):
+    """-> {zone, host, referrer, time} from Zone.Identifier ADS bytes, or None.
+    Line-oriented [ZoneTransfer] INI; unknown keys ignored (browsers add more)."""
+    out = {}
+    for line in data.decode("utf-8", "replace").splitlines():
+        k, sep, v = line.partition("=")
+        if not sep:
+            continue
+        k = k.strip().lower()
+        if k == "zoneid":
+            out["zone"] = v.strip()
+        elif k == "hosturl":
+            out["host"] = v.strip()
+        elif k == "referrerurl":
+            out["referrer"] = v.strip()
+        elif k == "downloadtime" and "time" not in out:
+            out["time"] = v.strip()
+    return out or None
+
+
+def _probe_motw(path):
+    """os.walk never lists NTFS ADS - probe the stream directly (no-op elsewhere)."""
+    if os.name != "nt":
+        return None
+    try:
+        with open(path + ":Zone.Identifier", "rb") as f:
+            return parse_motw(f.read(4096))
+    except OSError:
+        return None
+
 
 def load(path):
     """-> Target for any file. t.error only on OSError; PE-parse failure
@@ -83,8 +117,9 @@ def load(path):
     except OSError as e:
         return Target(path=ap, size=0, sha256="", kind="DATA",
                       error=f"unreadable: {type(e).__name__}: {e}")
-    k = _kind(ap, raw[:4096])
+    k = _kind(ap, raw[:0x8808])
     t = Target(path=ap, size=size, sha256=sha, raw=raw, kind=k, truncated=size > len(raw))
+    t.motw = _probe_motw(ap)
     if k != "PE":
         return t
     try:
@@ -103,9 +138,22 @@ SIDE_EXTS = (".nfo", ".diz")
 def collect(root_paths):
     """-> (targets, sibling map, side files). Every regular file is a target
     (zip members are handled by the archive detector, not walked here).
-    side files: zone-identifier ADS artifacts + .nfo/.diz scene markers."""
-    targets, side = [], []
+    side files: zone-identifier ADS artifacts + .nfo/.diz scene markers.
+    Glob patterns (*, ?) are expanded here: cmd/PowerShell don't glob for
+    native programs the way POSIX shells do."""
+    import glob as _glob
+    expanded = []
     for t in root_paths:
+        if ("*" in t or "?" in t) and not os.path.exists(t):
+            # ponytail: escape '[' so scene-release dirs like [GDZ] stay literal
+            hits = sorted(_glob.glob(t.replace("[", "[[]"), recursive="**" in t))
+            if not hits:
+                print(f"warning: no files match: {t}", file=sys.stderr)
+            expanded.extend(hits)
+        else:
+            expanded.append(t)
+    targets, side = [], []
+    for t in expanded:
         if os.path.isdir(t):
             for dirpath, _, files in os.walk(t):
                 for fn in files:
@@ -120,6 +168,8 @@ def collect(root_paths):
                     targets.append(full)
         elif os.path.exists(t):
             targets.append(t)
+        else:
+            print(f"warning: not found: {t}", file=sys.stderr)
     targets = sorted(set(os.path.abspath(p) for p in targets))
     sibs = {}
     for p in targets:

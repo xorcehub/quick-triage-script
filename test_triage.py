@@ -13,6 +13,10 @@ import io
 import json
 import os
 import sys
+import tempfile
+
+os.environ.setdefault("PECHECK_HISTORY",
+                      os.path.join(tempfile.mkdtemp(prefix="pecheck_test_hist_"), "history.json"))
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from pecheck import scan_targets   # noqa: E402

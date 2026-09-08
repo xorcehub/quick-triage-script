@@ -57,6 +57,8 @@ def _zip(t):
                 seen_kinds.append((name, "encoded script"))
         elif low.endswith((".zip", ".7z", ".rar", ".gz")):
             nested.append(name)
+    if any(i.filename == "[Content_Types].xml" for i in infos):
+        out += _ooxml(zf, infos)  # members triaged, oleObject MZ heads already caught above
     if exes:
         out.append(Finding("NOTE", f"zip contains {len(exes)} exe/dll member(s): "
                                   f"{', '.join(exes[:5])}{'...' if len(exes) > 5 else ''}"))
@@ -80,7 +82,54 @@ def _zip(t):
     return out
 
 
-_OTHER = {"SEVENZ": "7z", "RAR": "rar", "GZIP": "gzip", "XZ": "xz", "BZIP2": "bzip2"}
+_OTHER = {"SEVENZ": "7z", "RAR": "rar", "GZIP": "gzip", "XZ": "xz", "BZIP2": "bzip2",
+          "CAB": "cab", "RPM": "rpm", "AR": "ar", "SQUASHFS": "squashfs",
+          "TAR": "tar", "ISO": "iso"}
+
+
+def _member_head(zf, name, n=2048):
+    """-> first n bytes of a member, or b'' (never raises)."""
+    try:
+        with zf.open(name) as f:
+            return f.read(n)
+    except Exception:
+        return b""
+
+
+def _ooxml(zf, infos):
+    """OOXML (docx/xlsx/...) maldoc markers - head-sniff only, no full inflate."""
+    out = []
+    names = [i.filename.replace("\\", "/") for i in infos]
+    has_vba = any(n.lower().endswith("vbaproject.bin") for n in names)
+    if has_vba:
+        out.append(Finding("DOC?", "VBA project in OOXML container (macro-enabled document)"))
+    settings = _member_head(zf, "word/settings.xml", 4096)
+    update_fields = b"w:updateFields" in settings and b'"false"' not in settings.split(b"w:updateFields")[0][-16:]
+    if has_vba and update_fields:
+        out.append(Finding("DOC!", "VBA project + w:updateFields (forces macro re-run on open)",
+                           CRITICAL))
+    elif update_fields:
+        out.append(Finding("DOC?", "w:updateFields set (field/macro update on open)"))
+    # external relationships: file:// targets and package-level http targets are
+    # object/template launches; plain hyperlink rels are stock in every real docx
+    for n in names:
+        low = n.lower()
+        if not (low.endswith(".rels") and ("/_rels/" in low or low.startswith("_rels/"))):
+            continue
+        d = _member_head(zf, n, 4096)
+        if b'TargetMode="External"' not in d:
+            continue
+        if b'Target="file:' in d:
+            out.append(Finding("DOC!", f"external file:// relationship target in {n[-40:]}",
+                               CRITICAL))
+        elif b'Target="http' in d and (n == "_rels/.rels" or b"attachedTemplate" in d):
+            out.append(Finding("DOC!", f"external http relationship in {n[-40:]} "
+                                       "(package/template-level launch)", CRITICAL))
+    doc = _member_head(zf, "word/document.xml", 16384)
+    if b"DDEAUTO" in doc or (b"DDE" in doc and b"instrText" in doc):
+        out.append(Finding("DOC!", "DDE/DDEAUTO field in word/document.xml (code execution via field)",
+                           CRITICAL))
+    return out
 
 
 def run(t):

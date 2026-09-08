@@ -1,8 +1,7 @@
 """Structure anomalies: overlay, entry point, section sizing,
 packer/packager magic, embedded PEs."""
-import math
-
 from ..model import Finding
+from .sections import shannon
 
 PACKER_SECTIONS = {"upx0", "upx1", "upx2", "upx!", "mpress1", "mpress2",
                    ".aspack", ".adata", ".themida", ".vmp0", ".vmp1", ".enigma1", "pebundle"}
@@ -33,16 +32,6 @@ def _sniff(blob):
     return hits
 
 
-def shannon(data):
-    if not data:
-        return 0.0
-    counts = [0] * 256
-    for b in data:
-        counts[b] += 1
-    n = len(data)
-    return -sum((c / n) * math.log2(c / n) for c in counts if c)
-
-
 def _overlay_regions(pe, raw):
     """-> list of (start, end) byte ranges forming the overlay
     (after sections, minus the full certificate chain)."""
@@ -60,6 +49,10 @@ def _overlay_regions(pe, raw):
     except Exception:
         pass
     return [(start, end)]
+
+
+def _nm(s):
+    return s.Name.rstrip(b"\x00").decode(errors="replace")
 
 
 def run(t):
@@ -107,6 +100,28 @@ def run(t):
                             out.append(Finding("PACKED?", f"resource type {getattr(rt, 'id', '?')} contains {', '.join(hits)}"))
         except Exception:
             pass
+
+    # overlapping raw ranges: parser-confusion / SFX-packing class
+    mapped = sorted((s for s in pe.sections if s.PointerToRawData and s.SizeOfRawData),
+                    key=lambda s: s.PointerToRawData)
+    for a, b in zip(mapped, mapped[1:]):
+        if b.PointerToRawData < a.PointerToRawData + a.SizeOfRawData:
+            out.append(Finding("EVADE?", f"sections overlap raw ranges: "
+                                         f"{_nm(a)} and {_nm(b)} cover the same file bytes"))
+            break
+
+    # header CheckSum wrong - only meaningful on signed binaries (unsigned
+    # installers ship zero/stale checksums routinely; the cert gate kills the FP)
+    try:
+        dirs = pe.OPTIONAL_HEADER.DATA_DIRECTORY
+        hdr_sum = pe.OPTIONAL_HEADER.CheckSum
+        if hdr_sum and len(dirs) > 4 and dirs[4].VirtualAddress:
+            calc = pe.generate_checksum()
+            if calc and calc != hdr_sum:
+                out.append(Finding("STRUCT?", f"header CheckSum {hdr_sum:#x} != computed "
+                                              f"{calc:#x} on a signed image (edited after signing?)"))
+    except Exception:
+        pass
 
     # entry-point placement
     ep = pe.OPTIONAL_HEADER.AddressOfEntryPoint

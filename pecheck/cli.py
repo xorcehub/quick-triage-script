@@ -11,20 +11,157 @@ from .model import CRITICAL
 # REVIEW first, then errors, then unknown, then notes, then ok
 _ORDER = {"REVIEW": 0, "error": 1, "unsigned/unknown": 2, "note": 3, "ok": 4}
 
+# wizard groups: menu key -> (label, extensions)
+_EXT_GROUPS = {
+    "2": ("executables", (".exe", ".dll", ".sys", ".scr", ".cpl", ".ocx", ".mui")),
+    "3": ("scripts", (".ps1", ".bat", ".cmd", ".vbs", ".js", ".jse", ".wsf", ".hta", ".py")),
+    "4": ("documents", (".pdf", ".doc", ".docx", ".xls", ".xlsx", ".ppt", ".pptx")),
+    "5": ("archives", (".zip", ".7z", ".rar", ".cab", ".iso", ".msi")),
+}
+
+
+def _norm_exts(s):
+    """'exe, .DLL' -> ('.dll', '.exe')"""
+    return tuple(sorted({"." + e for e in (p.strip().lower().lstrip(".")
+                                           for p in s.replace(",", " ").split()) if e}))
+
+
+def _ext_inventory(targets):
+    """{ext: count} across the directory targets (metadata-only walk, no reads)."""
+    from collections import Counter
+    counts = Counter()
+    for t in targets:
+        if os.path.isdir(t):
+            for _, _, files in os.walk(t):
+                for fn in files:
+                    ext = os.path.splitext(fn)[1].lower()
+                    if ext:
+                        counts[ext] += 1
+    return counts
+
+
+def _pick_exts(inv, keyfunc=None):
+    """Arrow-key checkbox picker over the inventory (Windows console, stdlib only).
+    -> tuple of extensions, () if confirmed with none marked, or None if
+    cancelled / unsupported stdin (caller falls back to typing)."""
+    try:
+        import msvcrt
+    except ImportError:
+        return None
+    if not sys.stdin.isatty():
+        return None
+    if keyfunc is None:
+        keyfunc = msvcrt.getwch
+    items = sorted(inv.items(), key=lambda kv: -kv[1])
+    if not items:
+        return None
+    H = min(15, len(items))
+    cur, top, marked = 0, 0, set()
+    os.system("")  # ponytail: enables ANSI escapes on the classic console
+
+    def draw(first=False):
+        if not first:
+            print(f"\x1b[{H + 1}A", end="")
+        for i in range(top, top + H):
+            e, n = items[i]
+            sel = ">" if i == cur else " "
+            box = "[x]" if e in marked else "[ ]"
+            print(f"\x1b[K  {sel}{box} {e} x{n}")
+        below = len(items) - top - H
+        print("\x1b[K  " + f"{len(marked)} marked | up/down, space=mark, a=all, enter=start, q=cancel"
+              + (f" | {below} below" if below > 0 else ""))
+
+    draw(first=True)
+    while True:
+        k = keyfunc()
+        if k in ("\x00", "\xe0"):          # windows special-key prefix
+            k = keyfunc()
+            if k == "H":
+                cur = (cur - 1) % len(items)
+            elif k == "P":
+                cur = (cur + 1) % len(items)
+            else:
+                continue
+        elif k == " ":
+            marked ^= {items[cur][0]}
+        elif k == "a":
+            marked = {e for e, _ in items} if len(marked) < len(items) else set()
+        elif k == "\r":
+            print()
+            return tuple(sorted(marked))
+        elif k in ("q", "\x1b"):
+            print()
+            return None
+        else:
+            continue
+        if cur < top:
+            top = cur
+        elif cur >= top + H:
+            top = cur - H + 1
+        draw()
+
+
+def _ask_filter(inv=None):
+    """Interactive extension picker. inv: {ext: count} inventory of the target
+    tree, shown at option 6. -> (exts or None, label or None).
+    Enter/1 -> None (scan everything - malware hides in odd extensions)."""
+    print("\n  pecheck - what should this pass cover?\n")
+    print("    1) Everything        (recommended - malware hides in odd extensions)")
+    for k, (name, exts) in _EXT_GROUPS.items():
+        print(f"    {k}) {name:16} {' '.join(exts)}")
+    print("    6) Custom            select extensions, e.g. exe, dll")
+    print("\n  Choose 1-6 or combine like 2,4 [1]: ", end="", flush=True)
+    choice = input().strip().lower()
+    if not choice or choice == "1":
+        return None, None
+    picked, custom = [], []
+    for part in choice.replace(",", " ").split():
+        if part in _EXT_GROUPS:
+            picked.append(_EXT_GROUPS[part])
+        elif part == "6":
+            sel = _pick_exts(inv) if inv else None
+            if sel is None:                   # unsupported / cancelled -> typing
+                if inv:
+                    items = sorted(inv.items(), key=lambda kv: -kv[1])
+                    shown, rest = items[:20], len(items) - 20
+                    print("    extensions present in the folder:")
+                    for i in range(0, len(shown), 6):
+                        print("      " + "  ".join(f"{e} x{n}" for e, n in shown[i:i + 6]))
+                    if rest > 0:
+                        print(f"      ... and {rest} more")
+                print("    extensions to scan (comma-separated): ", end="", flush=True)
+                custom.extend(_norm_exts(input()))
+            elif sel:                         # () = confirmed "none" = no custom filter
+                custom.extend(sel)
+        else:
+            print(f"    (ignoring '{part}')")
+    exts = tuple(sorted({e for _, es in picked for e in es} | set(custom)))
+    names = "+".join([n for n, _ in picked] + (["custom"] if custom else []))
+    return (exts, names) if exts else (None, None)
+
 
 def _vt(sha256):
     return f"https://www.virustotal.com/gui/file/{sha256}"
 
 
 def print_report(r):
-    print(f"\n=== {r.path}")
+    if r.parent:
+        print(f"\n=== {r.path}   [extracted from {os.path.basename(r.parent)}]")
+    else:
+        print(f"\n=== {r.path}")
     if r.verdict == "error":
         print(f"  ERROR: {r.error}")
         return
     if r.duplicate_of:
         print(f"  byte-identical to {r.duplicate_of} (deduplicated)")
         return
-    print(f"  kind={r.kind}  arch={r.arch or '-'}  size={r.size:,}  sha256={r.sha256[:16]}...")
+    print(f"  kind={r.kind}  arch={r.arch or '-'}  size={r.size:,}  sha256={r.sha256[:16]}..."
+          + (f"  imphash={r.imphash}" if r.imphash else ""))
+    if r.motw:
+        bits = [f"zone={r.motw.get('zone', '?')}"]
+        if r.motw.get("host"):
+            bits.append(f"from={r.motw['host'][:80]}")
+        print("  motw: " + "  ".join(bits))
     if r.kind == "PE" or r.signed or r.sig:
         if r.sig:
             s, who = r.sig
@@ -53,6 +190,11 @@ def print_report(r):
 
 def print_summary(result):
     reports = result.reports
+    if not reports:
+        print("  (no files scanned - check the path/pattern)")
+        return
+    if result.skipped:
+        print(f"\n  i  Extension filter: {result.skipped} file(s) skipped without a verdict")
     print("\n" + "=" * 70)
     print("SUMMARY")
     print("=" * 70)
@@ -111,6 +253,15 @@ def print_summary(result):
         for r in unknown:
             print(f"     {os.path.basename(r.path):45} vt: {_vt(r.sha256)}")
 
+    downloads = [r for r in reports if r.motw and (r.motw.get("host") or r.motw.get("referrer"))]
+    if downloads:
+        print(f"\n  i  Download provenance (MOTW), {len(downloads)} file(s):")
+        for r in downloads[:10]:
+            src = r.motw.get("host") or r.motw.get("referrer") or "?"
+            print(f"     {os.path.basename(r.path):40} {src[:70]}")
+        if len(downloads) > 10:
+            print(f"     ... +{len(downloads) - 10} more")
+
     if result.side_files:
         print("\n  i  Context files present (scene markers / MOTW artifacts):")
         for p in result.side_files[:10]:
@@ -129,7 +280,16 @@ def main(argv=None):
     ap.add_argument("targets", nargs="+", help="file or directory")
     ap.add_argument("--json", action="store_true", help="machine-readable output")
     ap.add_argument("--no-sigs", action="store_true", help="skip WinVerifyTrust signature check")
+    ap.add_argument("--unpack", action="store_true",
+                    help="extract archives/installers and re-scan members (needs 7z for non-zip)")
+    ap.add_argument("--max-depth", type=int, default=1, metavar="N",
+                    help="container nesting levels to extract with --unpack (default 1)")
+    ap.add_argument("--no-history", action="store_true",
+                    help="skip the local scan-history sidecar (~/.config/pecheck/history.json)")
     ap.add_argument("--quiet", action="store_true", help="summary only (suppresses per-file blocks and progress)")
+    ap.add_argument("--ext", metavar="EXTS",
+                    help="only scan these extensions, e.g. --ext exe,dll (skipped files get NO verdict); "
+                         "when omitted on a TTY you'll be asked interactively")
     args = ap.parse_args(argv)
 
     try:
@@ -137,7 +297,24 @@ def main(argv=None):
     except Exception:
         pass
 
-    result = scan_targets(args.targets, use_sigs=not args.no_sigs)
+    exts = _norm_exts(args.ext) if args.ext else None
+    try:
+        # wizard: interactive TTY + directory target + no explicit filter + human output
+        if (exts is None and not args.json and not args.quiet and sys.stdin.isatty()
+                and any(os.path.isdir(t) for t in args.targets)):
+            exts, names = _ask_filter(_ext_inventory(args.targets))
+            if exts:
+                print(f"  -> scanning {names} only - others skipped, not cleared", flush=True)
+        result = scan_targets(args.targets, use_sigs=not args.no_sigs,
+                              unpack=args.unpack, max_depth=args.max_depth,
+                              use_history=not args.no_history, progress=not args.quiet,
+                              exts=exts)
+    except KeyboardInterrupt:
+        print("\ninterrupted", file=sys.stderr)
+        return 130
+    if args.unpack and not any(__import__("shutil").which(b) for b in ("7z", "7za", "7zr")):
+        print("note: 7z not on PATH - --unpack handled zip containers only "
+              "(install 7-zip for rar/7z/iso/cab/installer support)", file=sys.stderr)
     # human output reads best REVIEW-first; JSON keeps scan order
     ordered = sorted(result.reports, key=lambda r: (_ORDER.get(r.verdict, 9), r.path))
     n = len(result.reports)
@@ -148,6 +325,7 @@ def main(argv=None):
             "files": [r.to_dict() for r in result.reports],
             "folders": [f.__dict__ for f in result.folders],
             "side_files": result.side_files,
+            "skipped": result.skipped,
         }
         print(json.dumps(payload, indent=1))
     elif not args.quiet:
