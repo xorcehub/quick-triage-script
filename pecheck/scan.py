@@ -4,6 +4,7 @@ kind. Cross-file signals (duplicates, near-identical twins) run after the
 per-file pass. Verdict logic lives in verdict.py."""
 import os
 import shutil
+import sys
 from collections import defaultdict
 
 from . import peparse
@@ -90,10 +91,17 @@ def _twins(reports, meta):
                              f"different bytes (patched/tampered twin?)"))
 
 
-def _scan_list(targets, sibs, sigs, seen):
+def _scan_list(targets, sibs, sigs, seen, progress=False):
     """Scan every target path; `seen` dedups across the whole scan (incl. --unpack)."""
     reports, meta = [], {}
-    for p in targets:
+    for i, p in enumerate(targets, 1):
+        if progress:
+            try:
+                sz = f" {os.path.getsize(p):,}B"
+            except OSError:
+                sz = ""
+            print(f"[scan {i}/{len(targets)}] {os.path.basename(p)}{sz}",
+                  file=sys.stderr, flush=True)
         t = peparse.load(p)
         if t.sha256 and t.sha256 in seen:
             first = seen[t.sha256]
@@ -112,7 +120,7 @@ def _scan_list(targets, sibs, sigs, seen):
     return reports
 
 
-def _unpack_pass(parents, use_sigs, max_depth, seen, depth=0):
+def _unpack_pass(parents, use_sigs, max_depth, seen, depth=0, progress=False):
     """Extract containers (7z for exotic kinds/installers, zipfile for ZIP),
     re-scan children with parent links. depth-capped, temp dirs always cleaned."""
     from . import unpack as _u
@@ -127,7 +135,8 @@ def _unpack_pass(parents, use_sigs, max_depth, seen, depth=0):
             continue
         try:
             kid_paths, kid_sibs = _u.find_targets(tmp)
-            kids = _scan_list(kid_paths, kid_sibs, _sig_map(kid_paths, use_sigs), seen)
+            kids = _scan_list(kid_paths, kid_sibs, _sig_map(kid_paths, use_sigs), seen,
+                               progress=progress)
             for k in kids:
                 k.parent = r.path
                 k.findings.insert(0, Finding("NOTE", f"extracted from {os.path.basename(r.path)}"))
@@ -139,14 +148,14 @@ def _unpack_pass(parents, use_sigs, max_depth, seen, depth=0):
     return added
 
 
-def scan_targets(paths, use_sigs=True, unpack=False, max_depth=1, use_history=True):
+def scan_targets(paths, use_sigs=True, unpack=False, max_depth=1, use_history=True, progress=False):
     """-> ScanResult over all targets (dirs are walked; every file is scanned).
     Deduplicates identical files, flags near-identical twins (same size +
     TimeDateStamp, different bytes - PE only). unpack: extract containers and
     re-scan members (max_depth levels of nesting)."""
     targets, sibs, side = peparse.collect(paths)
     seen = {}
-    reports = _scan_list(targets, sibs, _sig_map(targets, use_sigs), seen)
+    reports = _scan_list(targets, sibs, _sig_map(targets, use_sigs), seen, progress=progress)
     if unpack:
         reports += _unpack_pass(reports, use_sigs, max_depth, seen)
     if use_history and reports:

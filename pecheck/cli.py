@@ -62,6 +62,9 @@ def print_report(r):
 
 def print_summary(result):
     reports = result.reports
+    if not reports:
+        print("  (no files scanned - check the path/pattern)")
+        return
     print("\n" + "=" * 70)
     print("SUMMARY")
     print("=" * 70)
@@ -161,9 +164,13 @@ def main(argv=None):
     except Exception:
         pass
 
-    result = scan_targets(args.targets, use_sigs=not args.no_sigs,
-                          unpack=args.unpack, max_depth=args.max_depth,
-                          use_history=not args.no_history)
+    try:
+        result = scan_targets(args.targets, use_sigs=not args.no_sigs,
+                              unpack=args.unpack, max_depth=args.max_depth,
+                              use_history=not args.no_history, progress=not args.quiet)
+    except KeyboardInterrupt:
+        print("\ninterrupted", file=sys.stderr)
+        return 130
     if args.unpack and not any(__import__("shutil").which(b) for b in ("7z", "7za", "7zr")):
         print("note: 7z not on PATH - --unpack handled zip containers only "
               "(install 7-zip for rar/7z/iso/cab/installer support)", file=sys.stderr)

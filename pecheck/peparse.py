@@ -5,6 +5,7 @@ loaded - ponytail: raise RAW_CAP if dump-like inputs need full bytes)."""
 import hashlib
 import os
 import struct
+import sys
 
 import pefile
 
@@ -137,9 +138,22 @@ SIDE_EXTS = (".nfo", ".diz")
 def collect(root_paths):
     """-> (targets, sibling map, side files). Every regular file is a target
     (zip members are handled by the archive detector, not walked here).
-    side files: zone-identifier ADS artifacts + .nfo/.diz scene markers."""
-    targets, side = [], []
+    side files: zone-identifier ADS artifacts + .nfo/.diz scene markers.
+    Glob patterns (*, ?) are expanded here: cmd/PowerShell don't glob for
+    native programs the way POSIX shells do."""
+    import glob as _glob
+    expanded = []
     for t in root_paths:
+        if ("*" in t or "?" in t) and not os.path.exists(t):
+            # ponytail: escape '[' so scene-release dirs like [GDZ] stay literal
+            hits = sorted(_glob.glob(t.replace("[", "[[]"), recursive="**" in t))
+            if not hits:
+                print(f"warning: no files match: {t}", file=sys.stderr)
+            expanded.extend(hits)
+        else:
+            expanded.append(t)
+    targets, side = [], []
+    for t in expanded:
         if os.path.isdir(t):
             for dirpath, _, files in os.walk(t):
                 for fn in files:
@@ -154,6 +168,8 @@ def collect(root_paths):
                     targets.append(full)
         elif os.path.exists(t):
             targets.append(t)
+        else:
+            print(f"warning: not found: {t}", file=sys.stderr)
     targets = sorted(set(os.path.abspath(p) for p in targets))
     sibs = {}
     for p in targets:

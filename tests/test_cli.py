@@ -45,6 +45,29 @@ class TestCliJson(CorpusTest):
             code2 = main([clean, "--json", "--no-sigs"])
         self.assertEqual(code2, 0)
 
+    def test_glob_expansion_and_missing_warn(self):
+        clean = os.path.join(self.dir, "cleandir")
+        os.makedirs(clean, exist_ok=True)
+        open(os.path.join(clean, "a.txt"), "w").write("hello")
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out), contextlib.redirect_stderr(io.StringIO()):
+            code = main([os.path.join(clean, "*.txt"), "--json", "--no-sigs"])
+        payload = json.loads(out.getvalue())
+        self.assertEqual(len(payload["files"]), 1)
+        self.assertEqual(code, 0)
+        nested = os.path.join(clean, "sub")
+        os.makedirs(nested, exist_ok=True)
+        open(os.path.join(nested, "c.txt"), "w").write("hi")
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out), contextlib.redirect_stderr(io.StringIO()):
+            code = main([os.path.join(clean, "**", "*.txt"), "--json", "--no-sigs"])
+        self.assertEqual(len(json.loads(out.getvalue())["files"]), 2)  # a.txt + sub/c.txt
+        err = io.StringIO()
+        with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(err):
+            code = main([os.path.join(clean, "*.nomatch"), "--no-sigs", "--quiet"])
+        self.assertIn("warning: no files match", err.getvalue())
+        self.assertEqual(code, 2)
+
     def test_human_summary_mentions_rollup_and_review(self):
         out = io.StringIO()
         with contextlib.redirect_stdout(out), contextlib.redirect_stderr(io.StringIO()):
