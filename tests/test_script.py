@@ -157,6 +157,16 @@ class TestScripts(CorpusTest):
         self.assertEqual(v, "REVIEW")
         self.assertTrue(any("decoded hex payload" in d for d in crit))
 
+    def test_nested_b64_review(self):
+        crit, v = self.crit("nestedb64.ps1")
+        self.assertEqual(v, "REVIEW")
+        self.assertTrue(any("decoded base64 payload" in d and "powershell" in d for d in crit))
+
+    def test_rot13_b64_payload_review(self):
+        crit, v = self.crit("rotpeek.ps1")
+        self.assertEqual(v, "REVIEW")
+        self.assertTrue(any("decoded base64 payload" in d and "powershell" in d for d in crit))
+
     def test_chunked_b64_reassembly_review(self):
         crit, v = self.crit("chunkedb64.ps1")
         self.assertEqual(v, "REVIEW")

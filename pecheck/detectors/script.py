@@ -6,6 +6,7 @@ obfuscation plus backtick (PowerShell), caret (cmd.exe) and quote-concat
 runs are decoded and the payload token-scanned (what does it actually do?). LNK gets
 a header check plus command-marker scan over the raw bytes (ANSI + UTF-16)."""
 import base64
+import codecs
 import re
 import zlib
 
@@ -116,14 +117,37 @@ def _decoded_runs(raw):
             pass
 
 
+def _unfold(dec):
+    """Nested encoding: peel inner b64/hex layers (up to 3) off the payload."""
+    for _ in range(3):
+        m, h = _B64_RUN.search(dec), _HEX_RUN.search(dec)
+        m = m if m and (not h or m.start() <= h.start()) else h
+        if m is None:
+            break
+        blob = m.group()
+        try:
+            inner = (base64.b64decode(blob + b"=" * (-len(blob) % 4)) if m.re is _B64_RUN
+                     else bytes.fromhex(blob.decode("ascii")))
+        except Exception:
+            break
+        if len(inner) < 8 or inner == dec:
+            break
+        dec = _inflate(inner)
+    return dec
+
+
 def _scan_payload(label, dec, seen, out):
-    """Inflate, token-scan (ascii + utf-16 views), emit finding. Dedup by head."""
-    dec = _inflate(dec)
+    """Unfold+inflate, token-scan (ascii + utf-16 + rot13 views), emit finding."""
+    dec = _unfold(_inflate(dec))
     head = dec[:8192]
     if head in seen:
         return
     seen.add(head)
-    view = head.decode("utf-16-le", "ignore").encode("latin-1", "ignore") + head
+    view = (head.decode("utf-16-le", "ignore").encode("latin-1", "ignore") + head)
+    try:  # rot13-wrapped payloads are common free obfuscation
+        view += codecs.encode(head.decode("latin-1", "ignore"), "rot13").encode("latin-1", "ignore")
+    except Exception:
+        pass
     hits = [p.decode() for p in _PEEK_TOKENS if p in view]
     if dec[:2] == b"MZ":
         hits.insert(0, "MZ executable")
