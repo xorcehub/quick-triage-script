@@ -252,6 +252,8 @@ def build_folder(root):
     # minimal ISO9660: PVD (type 1 CD001) at sector 16 + terminator
     _pvd = b"\x01CD001\x01" + b"\x00" * 2041
     _end = b"\xffCD001\x01" + b"\x00" * 2041
+    w("blob.pyc", b"\x6f\x0d\x0d\x0a" + b"\x00" * 40 + b"powershell -enc hidden http://x")
+    w("klazz.class", b"\xca\xfe\xba\xbe\x00\x00\x00\x34" + b"\x00" * 40 + b"http://x/c")
     w("lure.iso", b"\x00" * 0x8000 + _pvd + _end)
     w("phishy.url", b"[InternetShortcut]\r\nURL=http://update-7f3b2c1d9e4f.x8k2.top/payload\r\n")
     w("uncicon.url", b"[InternetShortcut]\r\nURL=https://store.steampowered.com\r\n"

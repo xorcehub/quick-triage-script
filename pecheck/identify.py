@@ -2,7 +2,8 @@
 Zero-offset magic wins; PDF/RTF may carry a small prefix (checked in first 1KB).
 Everything unrecognized falls to DATA (unknown binary) or SCRIPT/TEXT via ext.
 Kinds: PE, DOS, ELF, MACHO, ZIP, SEVENZ, RAR, GZIP, XZ, BZIP2, OLE, RTF, PDF,
-LNK, SCRIPT, TEXT, MEDIA, DATA, EMPTY, CAB, RPM, AR, SQUASHFS, TAR, ISO.
+LNK, SCRIPT, TEXT, MEDIA, DATA, EMPTY, CAB, RPM, AR, SQUASHFS, TAR, ISO,
+COMPILED (.pyc/.pyo magic-gated, .class via cafebabe disambiguation).
 peparse passes a >=0x8808 head so the ISO PVD at 0x8001 is reachable."""
 import os
 import struct
@@ -75,6 +76,9 @@ def kind(path, head=None):
         if head.startswith(magic):
             if k == "PE" and not _has_pe_sig(path, head):
                 return "DOS"
+            if magic == b"\xca\xfe\xba\xbe":  # shared: Mach-O fat header vs Java class
+                n = int.from_bytes(head[4:8], "big")
+                k = "MACHO" if 1 <= n <= 12 else "COMPILED"  # java major is 45-70
             return k
     for off, magic, k in _FIXED:
         if head[off:off + len(magic)] == magic:
@@ -86,6 +90,8 @@ def kind(path, head=None):
     ext = os.path.splitext(path)[1].lower()
     if ext in SCRIPT_EXTS:
         return "SCRIPT"
+    if ext in (".pyc", ".pyo") and len(head) >= 4 and head[2:4] == b"\r\n":
+        return "COMPILED"   # pyc magic: 2 version bytes + \r\n
     if _looks_text(head):
         return "TEXT" if ext not in (".exe", ".dll", ".scr") else "DATA"
     return "DATA"

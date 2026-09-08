@@ -500,6 +500,9 @@ def run(t):
         if b"<?php" in head:
             return _php(t, t.raw, _norm(_strip_comments(t.raw)))
         return []
+    if t.kind == "COMPILED":
+        return [Finding("NOTE", "compiled script bytecode (.pyc/.class): source not "
+                                "scannable as text - see strings below, treat as opaque")]
     if t.kind != "SCRIPT":
         return []
     norm = _norm(_strip_comments(t.raw))

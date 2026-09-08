@@ -260,6 +260,13 @@ class TestScripts(CorpusTest):
         r = self.report("good.url")
         self.assertNotEqual(r.verdict, "REVIEW")
 
+    def test_compiled_bytecode_noted(self):
+        for name in ("blob.pyc", "klazz.class"):
+            r = self.report(name)
+            self.assertEqual(r.kind, "COMPILED", name)
+            self.assertTrue(any("compiled script bytecode" in f.detail for f in r.findings))
+            self.assertNotEqual(r.verdict, "ok")   # note floor, not silent
+
     def test_iso_identified_and_extractable(self):
         r = self.report("lure.iso")
         self.assertEqual(r.kind, "ISO")
