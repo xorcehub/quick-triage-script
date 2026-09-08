@@ -102,6 +102,11 @@ class TestScripts(CorpusTest):
         self.assertEqual(v, "REVIEW")
         self.assertTrue(any("reverse-shell" in d for d in crit))
 
+    def test_bat_ps_one_liner_review(self):
+        crit, v = self.crit("oneliner.bat")
+        self.assertEqual(v, "REVIEW")
+        self.assertTrue(any("batch dropper combo" in d for d in crit))
+
     def test_gzipped_b64_payload_review(self):
         crit, v = self.crit("gzpeek.ps1")
         self.assertEqual(v, "REVIEW")

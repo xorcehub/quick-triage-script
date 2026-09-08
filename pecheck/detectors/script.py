@@ -54,7 +54,10 @@ BAT_BAD = ((b"powershell", b"-enc", b"-ec", b"-encodedcommand", b"-w1", b"-whidd
            (b"regsvr32", b"/i:"),
            (b"rundll32", b"javascript:"),
            (b"regadd", b"currentversion\\run"),
-           (b"curl", b"http"), (b"wget", b"http"))
+           (b"curl", b"http"), (b"wget", b"http"),
+           # PS one-liner body invoked from bat (-c/-command): powershell + exec/dl token
+           (b"powershell", b"iex", b"invoke-expression", b"downloadstring", b"downloadfile",
+            b"net.webclient", b"frombase64string"))
 VBS_NET = (b"msxml2.xmlhttp", b"winhttp.winhttprequest", b"msxml2.serverxmlhttp", b"adodb.stream")
 VBS_EX = (b"savetofile", b".run(", b"shellexecute", b"wscript.shell", b"createobject(")
 LNK_BAD = (b"powershell", b"cmd.exe", b"-enc", b"-ec", b"-encodedcommand", b"whidden",

