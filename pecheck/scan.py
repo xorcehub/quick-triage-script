@@ -13,7 +13,7 @@ from .verdict import verdict as _verdict, downgrade as _downgrade, rollup as _ro
 
 def _scan_target(t, siblings, sig):
     r = FileReport(path=t.path, size=t.size, sha256=t.sha256, kind=t.kind,
-                   arch=t.arch, error=t.error)
+                   arch=t.arch, error=t.error, motw=t.motw)
     if t.error and t.kind != "PE":
         r.verdict = "error"       # unreadable (OSError) - PE-parse errors fall through
         return r
