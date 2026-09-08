@@ -8,7 +8,8 @@ from ..model import Finding, CRITICAL
 from .sections import shannon
 
 # kinds where embedded-binary hits are structural (members/segments), not findings
-_SKIP = {"ZIP", "SEVENZ", "RAR", "GZIP", "XZ", "BZIP2", "MACHO", "EMPTY", "MEDIA"}
+_SKIP = {"ZIP", "SEVENZ", "RAR", "GZIP", "XZ", "BZIP2", "MACHO", "EMPTY", "MEDIA",
+         "CAB", "RPM", "AR", "SQUASHFS", "TAR", "ISO"}  # members are structural, not findings
 _TEXTISH = {"SCRIPT", "TEXT", "LNK", "PDF", "OLE", "RTF"}
 B64_RE = re.compile(rb"[A-Za-z0-9+/]{4096,}")
 HEX_RE = re.compile(rb"[0-9a-fA-F]{8192,}")
