@@ -260,6 +260,12 @@ class TestScripts(CorpusTest):
         r = self.report("good.url")
         self.assertNotEqual(r.verdict, "REVIEW")
 
+    def test_url_trait_scoring(self):
+        r = self.report("phishy.url")
+        self.assertNotEqual(r.verdict, "ok")
+        self.assertTrue(any("suspicious url traits" in f.detail and "cheap TLD" in f.detail
+                            for f in r.findings))
+
     def test_url_unc_icon_leak_note(self):
         r = self.report("uncicon.url")
         self.assertEqual(r.verdict, "note")   # lure-worthy but not REVIEW
