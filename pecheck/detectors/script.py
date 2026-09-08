@@ -208,7 +208,7 @@ def _url(t, raw, norm):
     if m:
         return [Finding("SCRIPT!", ".url shortcut targets local file: "
                        + m.group(1)[:60].decode(errors="replace"), CRITICAL)]
-    if b"\\" in norm:  # icon/target on remote share: NTLM hash leaks on open
+    if b"\\\\" in norm:  # icon/target on remote share: NTLM hash leaks on open
         return [Finding("NET?", ".url references UNC path (credential-leak lure)")]
     return []
 
@@ -228,7 +228,7 @@ def _lnk(t, raw):
         detail = m.group()[:90].decode(errors="replace") if m else ", ".join(h[:3])
         out.append(Finding("SCRIPT!" if bad else "SCRIPT?",
                            "LNK arguments reference: " + detail, CRITICAL if bad else "note"))
-    if b"\\" in norm:  # icon/target on remote share: NTLM hash leaks on open
+    if b"\\\\" in norm:  # icon/target on remote share: NTLM hash leaks on open
         out.append(Finding("NET?", "LNK references UNC path (credential-leak lure)"))
     return out
 
@@ -291,7 +291,7 @@ def _php(t, raw, norm):
 
 
 def _scf(t, raw, norm):
-    if b"iconfile=\\" in norm:
+    if b"iconfile=\\\\" in norm:
         return [Finding("NET?", "SCF IconFile on UNC share (credential-leak lure)")]
     return []
 
@@ -307,7 +307,7 @@ def _setms(t, raw, norm):
 
 
 def _libms(t, raw, norm):
-    if b"\\" in norm:
+    if b"\\\\" in norm:
         return [Finding("NET?", "library-ms references UNC path (credential-leak lure)")]
     return []
 
