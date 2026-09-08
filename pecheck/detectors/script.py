@@ -77,10 +77,11 @@ _B64_RUN = re.compile(rb"[A-Za-z0-9+/]{120,}={0,2}")
 
 
 def _inflate(dec):
-    """base64 payloads are often gzip/deflate-compressed on top: try both, else raw."""
+    """base64 payloads are often gzip/deflate-compressed on top: try both, else raw.
+    Capped at 1MB: token scan only needs the head; blocks decompression bombs."""
     for wbits in (47, -15):  # 47 = auto gzip/zlib, -15 = raw deflate
         try:
-            return zlib.decompress(dec, wbits)
+            return zlib.decompressobj(wbits).decompress(dec, 1 << 20)
         except Exception:
             continue
     return dec
