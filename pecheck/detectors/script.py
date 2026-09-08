@@ -1,7 +1,8 @@
 """Script + shortcut triage: obfuscation, download/decode-execute pairs,
 dropper patterns. Markers matched against a normalized view (lowercase,
-whitespace/backtick/caret-stripped) to defeat case/space obfuscation plus
-backtick (PowerShell) and caret (cmd.exe) splitting. Long base64 runs are
+whitespace/backtick/caret/quote/plus-stripped) to defeat case/space
+obfuscation plus backtick (PowerShell), caret (cmd.exe) and quote-concat
+("ie"+"x") splitting. Long base64 runs are
 decoded and the payload token-scanned (what does it actually do?). LNK gets
 a header check plus command-marker scan over the raw bytes (ANSI + UTF-16)."""
 import base64
@@ -18,7 +19,8 @@ PY_DEC = (b"base64.b64decode", b"b64decode", b"codecs.decode", b"unhexlify",
 SH_DL = (b"curl", b"wget", b"fetch")
 
 _LNK_CLSID = bytes.fromhex("0114020000000000c000000000000046")
-_NORM_WS = re.compile(rb"[\s`^]+")  # ponytail: also PS backtick + cmd caret evasion
+_NORM_WS = re.compile(b"[\\s`^\"'+]+")  # ws + PS backtick + cmd caret, plus quote/plus
+# stripped so concat obfuscation ("ie"+"x") re-joins for marker matching
 
 
 def _norm(raw):

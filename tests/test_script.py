@@ -107,6 +107,11 @@ class TestScripts(CorpusTest):
         self.assertEqual(v, "REVIEW")
         self.assertTrue(any("batch dropper combo" in d for d in crit))
 
+    def test_concat_split_exec_review(self):
+        crit, v = self.crit("concat.ps1")
+        self.assertEqual(v, "REVIEW")
+        self.assertTrue(any("download+execute" in d for d in crit))
+
     def test_gzipped_b64_payload_review(self):
         crit, v = self.crit("gzpeek.ps1")
         self.assertEqual(v, "REVIEW")
