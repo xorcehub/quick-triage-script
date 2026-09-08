@@ -17,7 +17,10 @@ def _vt(sha256):
 
 
 def print_report(r):
-    print(f"\n=== {r.path}")
+    if r.parent:
+        print(f"\n=== {r.path}   [extracted from {os.path.basename(r.parent)}]")
+    else:
+        print(f"\n=== {r.path}")
     if r.verdict == "error":
         print(f"  ERROR: {r.error}")
         return
@@ -144,6 +147,10 @@ def main(argv=None):
     ap.add_argument("targets", nargs="+", help="file or directory")
     ap.add_argument("--json", action="store_true", help="machine-readable output")
     ap.add_argument("--no-sigs", action="store_true", help="skip WinVerifyTrust signature check")
+    ap.add_argument("--unpack", action="store_true",
+                    help="extract archives/installers and re-scan members (needs 7z for non-zip)")
+    ap.add_argument("--max-depth", type=int, default=1, metavar="N",
+                    help="container nesting levels to extract with --unpack (default 1)")
     ap.add_argument("--quiet", action="store_true", help="summary only (suppresses per-file blocks and progress)")
     args = ap.parse_args(argv)
 
@@ -152,7 +159,11 @@ def main(argv=None):
     except Exception:
         pass
 
-    result = scan_targets(args.targets, use_sigs=not args.no_sigs)
+    result = scan_targets(args.targets, use_sigs=not args.no_sigs,
+                          unpack=args.unpack, max_depth=args.max_depth)
+    if args.unpack and not any(__import__("shutil").which(b) for b in ("7z", "7za", "7zr")):
+        print("note: 7z not on PATH - --unpack handled zip containers only "
+              "(install 7-zip for rar/7z/iso/cab/installer support)", file=sys.stderr)
     # human output reads best REVIEW-first; JSON keeps scan order
     ordered = sorted(result.reports, key=lambda r: (_ORDER.get(r.verdict, 9), r.path))
     n = len(result.reports)
