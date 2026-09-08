@@ -2,8 +2,8 @@
 dropper patterns. Markers matched against a normalized view (lowercase,
 whitespace/backtick/caret/quote/plus-stripped) to defeat case/space
 obfuscation plus backtick (PowerShell), caret (cmd.exe) and quote-concat
-("ie"+"x") splitting. Long base64 runs are
-decoded and the payload token-scanned (what does it actually do?). LNK gets
+("ie"+"x") splitting. Long base64/hex/decimal
+runs are decoded and the payload token-scanned (what does it actually do?). LNK gets
 a header check plus command-marker scan over the raw bytes (ANSI + UTF-16)."""
 import base64
 import re
@@ -74,6 +74,8 @@ HTML_DROP = (b"newblob(", b"blob([", b"msaveoropenblob", b".click()", b"createob
 _PEEK_TOKENS = (b"powershell", b"cmd.exe", b"http://", b"https://", b"invoke-expression",
                 b"frombase64string", b"certutil", b"/dev/tcp")
 _B64_RUN = re.compile(rb"[A-Za-z0-9+/]{120,}={0,2}")
+_HEX_RUN = re.compile(rb"(?:[0-9a-fA-F]{2}){80,}")   # >=80 encoded bytes
+_DEC_ARR = re.compile(rb"\d{1,3}(?:,\s*\d{1,3}){24,}")  # PS [char[]](104,116,...) style
 
 
 def _inflate(dec):
@@ -87,25 +89,49 @@ def _inflate(dec):
     return dec
 
 
-def _b64peek(raw):
-    """Decode long base64 runs, token-scan the payload (ascii + utf-16 views)."""
-    out = []
+def _decoded_runs(raw):
+    """Every encoded payload we can carve: top b64 / hex / decimal-array runs."""
     for m in list(_B64_RUN.finditer(raw))[:3]:
         blob = m.group()
         try:
-            dec = _inflate(base64.b64decode(blob + b"=" * (-len(blob) % 4)))
+            yield "base64", base64.b64decode(blob + b"=" * (-len(blob) % 4))
         except Exception:
-            continue
-        view = (dec[:8192].decode("utf-16-le", "ignore").encode("latin-1", "ignore")
-                + dec[:8192])  # ascii + utf-16 stored payload both visible to byte tokens
-        hits = [p.decode() for p in _PEEK_TOKENS if p in view]
-        if dec[:2] == b"MZ":
-            hits.insert(0, "MZ executable")
-        if hits:
-            hot = any(h in hits for h in ("MZ executable", "powershell", "cmd.exe", "/dev/tcp"))
-            out.append(Finding("OBF!" if hot else "OBF?",
-                               f"decoded base64 payload ({len(dec):,}B) contains: "
-                               + ", ".join(hits[:4]), CRITICAL if hot else "note"))
+            pass
+    for m in list(_HEX_RUN.finditer(raw))[:3]:
+        try:
+            yield "hex", bytes.fromhex(m.group().decode("ascii"))
+        except Exception:
+            pass
+    for m in list(_DEC_ARR.finditer(raw))[:3]:
+        try:
+            yield "decimal", bytes(int(x) for x in m.group().split(b","))
+        except Exception:
+            pass
+
+
+def _scan_payload(label, dec, seen, out):
+    """Inflate, token-scan (ascii + utf-16 views), emit finding. Dedup by head."""
+    dec = _inflate(dec)
+    head = dec[:8192]
+    if head in seen:
+        return
+    seen.add(head)
+    view = head.decode("utf-16-le", "ignore").encode("latin-1", "ignore") + head
+    hits = [p.decode() for p in _PEEK_TOKENS if p in view]
+    if dec[:2] == b"MZ":
+        hits.insert(0, "MZ executable")
+    if hits:
+        hot = any(h in hits for h in ("MZ executable", "powershell", "cmd.exe", "/dev/tcp"))
+        out.append(Finding("OBF!" if hot else "OBF?",
+                           f"decoded {label} payload ({len(dec):,}B) contains: "
+                           + ", ".join(hits[:4]), CRITICAL if hot else "note"))
+
+
+def _peek(raw):
+    """Decode encoded runs, token-scan each payload (what does it actually do?)."""
+    out, seen = [], set()
+    for label, dec in _decoded_runs(raw):
+        _scan_payload(label, dec, seen, out)
     return out
 
 
@@ -323,7 +349,7 @@ def run(t):
     if not t.raw:
         return []
     if t.kind == "LNK":
-        return _lnk(t, t.raw) + _b64peek(t.raw)
+        return _lnk(t, t.raw) + _peek(t.raw)
     if t.ext in (".html", ".htm", ".mht", ".xhtml"):  # kind TEXT: html smuggling is script territory
         return _html(t, t.raw, _norm(t.raw))
     if t.kind == "TEXT":  # renamed scripts: extension lies, content doesn't
@@ -340,4 +366,4 @@ def run(t):
     norm = _norm(t.raw)
     h = _H.get(t.ext)
     out = h(t, t.raw, norm) if h else []
-    return out + _persist(norm) + _b64peek(t.raw)
+    return out + _persist(norm) + _peek(t.raw)

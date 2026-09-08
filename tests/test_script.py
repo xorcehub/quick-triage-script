@@ -152,6 +152,16 @@ class TestScripts(CorpusTest):
         self.assertEqual(v, "REVIEW")
         self.assertTrue(any("batch dropper combo" in d for d in crit))
 
+    def test_hex_payload_review(self):
+        crit, v = self.crit("hexpeek.ps1")
+        self.assertEqual(v, "REVIEW")
+        self.assertTrue(any("decoded hex payload" in d for d in crit))
+
+    def test_decimal_array_payload_review(self):
+        crit, v = self.crit("decpeek.js")
+        self.assertEqual(v, "REVIEW")
+        self.assertTrue(any("decoded decimal payload" in d for d in crit))
+
     def test_concat_split_exec_review(self):
         crit, v = self.crit("concat.ps1")
         self.assertEqual(v, "REVIEW")
