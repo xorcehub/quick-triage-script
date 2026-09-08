@@ -133,6 +133,38 @@ class TestCliJson(CorpusTest):
         self.assertIn(".exe x1", out.getvalue())
         self.assertEqual((exts, names), ((".txt",), "custom"))
 
+    def test_pick_exts_keyboard(self):
+        try:
+            import msvcrt  # noqa: F401
+        except ImportError:
+            self.skipTest("msvcrt (Windows) not available")
+        from pecheck.cli import _pick_exts
+        real_isatty = sys.stdin.isatty
+        sys.stdin.isatty = lambda: True          # picker requires a console
+        try:
+            # mark first, cursor down, mark second, confirm
+            keys = iter([" ", "\xe0", "P", " ", "\r"])
+            out = io.StringIO()
+            with contextlib.redirect_stdout(out):
+                r = _pick_exts({".exe": 10, ".dll": 3, ".txt": 22}, keyfunc=lambda: next(keys))
+            self.assertEqual(r, (".exe", ".txt"))   # count-desc order: txt, exe, dll
+            self.assertIn("[x] .exe x10", out.getvalue())
+            # q cancels -> None
+            keys2 = iter(["q"])
+            with contextlib.redirect_stdout(io.StringIO()):
+                self.assertIsNone(_pick_exts({".exe": 1}, keyfunc=lambda: next(keys2)))
+            # enter with none marked -> () (no custom filter)
+            keys3 = iter(["\r"])
+            with contextlib.redirect_stdout(io.StringIO()):
+                self.assertEqual(_pick_exts({".exe": 1}, keyfunc=lambda: next(keys3)), ())
+        finally:
+            sys.stdin.isatty = real_isatty
+
+    def test_pick_exts_declines_without_console(self):
+        from pecheck.cli import _pick_exts
+        # under pytest stdin is not a tty -> immediate None, no keyboard read
+        self.assertIsNone(_pick_exts({".exe": 1}))
+
     def test_human_summary_mentions_rollup_and_review(self):
         out = io.StringIO()
         with contextlib.redirect_stdout(out), contextlib.redirect_stderr(io.StringIO()):

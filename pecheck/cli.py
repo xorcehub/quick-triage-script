@@ -40,6 +40,67 @@ def _ext_inventory(targets):
     return counts
 
 
+def _pick_exts(inv, keyfunc=None):
+    """Arrow-key checkbox picker over the inventory (Windows console, stdlib only).
+    -> tuple of extensions, () if confirmed with none marked, or None if
+    cancelled / unsupported stdin (caller falls back to typing)."""
+    try:
+        import msvcrt
+    except ImportError:
+        return None
+    if not sys.stdin.isatty():
+        return None
+    if keyfunc is None:
+        keyfunc = msvcrt.getwch
+    items = sorted(inv.items(), key=lambda kv: -kv[1])
+    if not items:
+        return None
+    H = min(15, len(items))
+    cur, top, marked = 0, 0, set()
+    os.system("")  # ponytail: enables ANSI escapes on the classic console
+
+    def draw(first=False):
+        if not first:
+            print(f"\x1b[{H + 1}A", end="")
+        for i in range(top, top + H):
+            e, n = items[i]
+            sel = ">" if i == cur else " "
+            box = "[x]" if e in marked else "[ ]"
+            print(f"\x1b[K  {sel}{box} {e} x{n}")
+        below = len(items) - top - H
+        print("\x1b[K  " + f"{len(marked)} marked | up/down, space=mark, a=all, enter=start, q=cancel"
+              + (f" | {below} below" if below > 0 else ""))
+
+    draw(first=True)
+    while True:
+        k = keyfunc()
+        if k in ("\x00", "\xe0"):          # windows special-key prefix
+            k = keyfunc()
+            if k == "H":
+                cur = (cur - 1) % len(items)
+            elif k == "P":
+                cur = (cur + 1) % len(items)
+            else:
+                continue
+        elif k == " ":
+            marked ^= {items[cur][0]}
+        elif k == "a":
+            marked = {e for e, _ in items} if len(marked) < len(items) else set()
+        elif k == "\r":
+            print()
+            return tuple(sorted(marked))
+        elif k in ("q", "\x1b"):
+            print()
+            return None
+        else:
+            continue
+        if cur < top:
+            top = cur
+        elif cur >= top + H:
+            top = cur - H + 1
+        draw()
+
+
 def _ask_filter(inv=None):
     """Interactive extension picker. inv: {ext: count} inventory of the target
     tree, shown at option 6. -> (exts or None, label or None).
@@ -58,16 +119,20 @@ def _ask_filter(inv=None):
         if part in _EXT_GROUPS:
             picked.append(_EXT_GROUPS[part])
         elif part == "6":
-            if inv:
-                items = sorted(inv.items(), key=lambda kv: -kv[1])
-                shown, rest = items[:20], len(items) - 20
-                print("    extensions present in the folder:")
-                for i in range(0, len(shown), 6):
-                    print("      " + "  ".join(f"{e} x{n}" for e, n in shown[i:i + 6]))
-                if rest > 0:
-                    print(f"      ... and {rest} more")
-            print("    extensions to scan (comma-separated): ", end="", flush=True)
-            custom.extend(_norm_exts(input()))
+            sel = _pick_exts(inv) if inv else None
+            if sel is None:                   # unsupported / cancelled -> typing
+                if inv:
+                    items = sorted(inv.items(), key=lambda kv: -kv[1])
+                    shown, rest = items[:20], len(items) - 20
+                    print("    extensions present in the folder:")
+                    for i in range(0, len(shown), 6):
+                        print("      " + "  ".join(f"{e} x{n}" for e, n in shown[i:i + 6]))
+                    if rest > 0:
+                        print(f"      ... and {rest} more")
+                print("    extensions to scan (comma-separated): ", end="", flush=True)
+                custom.extend(_norm_exts(input()))
+            elif sel:                         # () = confirmed "none" = no custom filter
+                custom.extend(sel)
         else:
             print(f"    (ignoring '{part}')")
     exts = tuple(sorted({e for _, es in picked for e in es} | set(custom)))
