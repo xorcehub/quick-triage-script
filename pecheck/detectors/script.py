@@ -277,10 +277,42 @@ def _wsf(t, raw, norm):
     return out + _vbsjs(t, raw, norm)
 
 
+def _php(t, raw, norm):
+    inp = _hits(norm, (b"$_post", b"$_request", b"$_get", b"$_cookie"))
+    exe = _hits(norm, (b"eval(", b"assert(", b"system(", b"shell_exec", b"passthru(",
+                       b"popen(", b"base64_decode", b"file_put_contents"))
+    if inp and exe:
+        return [Finding("SCRIPT!", "webshell: " + inp[0] + " input into " + exe[0], CRITICAL)]
+    return []
+
+
+def _scf(t, raw, norm):
+    if b"iconfile=\\" in norm:
+        return [Finding("NET?", "SCF IconFile on UNC share (credential-leak lure)")]
+    return []
+
+
+def _setms(t, raw, norm):
+    h = _hits(norm, LNK_BAD)
+    if h:
+        bad = any(x in h for x in ("-enc", "-encodedcommand", "whidden", "windowstyle", "mshta", "certutil"))
+        return [Finding("SCRIPT!" if bad else "SCRIPT?",
+                        "settingcontent-ms command tokens: " + ", ".join(h[:3]),
+                        CRITICAL if bad else "note")]
+    return []
+
+
+def _libms(t, raw, norm):
+    if b"\\" in norm:
+        return [Finding("NET?", "library-ms references UNC path (credential-leak lure)")]
+    return []
+
+
 _H = {".ps1": _ps1, ".psm1": _ps1, ".bat": _bat, ".cmd": _bat, ".vbs": _vbsjs,
       ".py": _py, ".pyw": _py, ".sh": _sh,
       ".vbe": _vbsjs, ".js": _vbsjs, ".jse": _vbsjs, ".hta": _hta, ".reg": _reg,
-      ".url": _url, ".wsf": _wsf, ".sct": _wsf}
+      ".url": _url, ".wsf": _wsf, ".sct": _wsf,
+      ".php": _php, ".scf": _scf, ".settingcontent-ms": _setms, ".library-ms": _libms}
 
 
 def run(t):

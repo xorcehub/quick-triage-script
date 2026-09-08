@@ -102,6 +102,26 @@ class TestScripts(CorpusTest):
         self.assertEqual(v, "REVIEW")
         self.assertTrue(any("smuggling" in d for d in crit))
 
+    def test_php_webshell_review(self):
+        crit, v = self.crit("shell.php")
+        self.assertEqual(v, "REVIEW")
+        self.assertTrue(any("webshell" in d for d in crit))
+
+    def test_scf_unc_leak(self):
+        r = self.report("leak.scf")
+        self.assertEqual(r.kind, "SCRIPT")
+        self.assertTrue(any("UNC" in f.detail for f in r.findings))
+
+    def test_settingcontent_ms_args_review(self):
+        crit, v = self.crit("evil.settingcontent-ms")
+        self.assertEqual(v, "REVIEW")
+        self.assertTrue(any("settingcontent-ms" in d for d in crit))
+
+    def test_library_ms_unc(self):
+        r = self.report("lure.library-ms")
+        self.assertEqual(r.kind, "SCRIPT")
+        self.assertTrue(any("UNC" in f.detail for f in r.findings))
+
     def test_sh_command_substitution_review(self):
         crit, v = self.crit("pipe.sh")
         self.assertEqual(v, "REVIEW")
