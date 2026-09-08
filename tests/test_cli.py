@@ -132,8 +132,6 @@ class TestCliJson(CorpusTest):
         self.assertIn(".txt x2", out.getvalue())
         self.assertIn(".exe x1", out.getvalue())
         self.assertEqual((exts, names), ((".txt",), "custom"))
-        finally:
-            builtins.input = real_input
 
     def test_human_summary_mentions_rollup_and_review(self):
         out = io.StringIO()
