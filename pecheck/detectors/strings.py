@@ -59,7 +59,8 @@ def _benign(u):
 
 
 def run(t):
-    if t.error or t.pe is None or not t.raw:
+    """Generic: any kind with bytes (cert masking is a no-op without a PE)."""
+    if not t.raw:
         return []
     out = []
     corpus = extract_corpus(t.raw, t.pe)
@@ -87,6 +88,7 @@ def run(t):
     aa = sorted({m.decode("latin-1", "replace").lower() for m in ANTIANALYSIS_RE.findall(corpus)})
     if aa:
         out.append(Finding("EVADE", "anti-analysis strings: " + ", ".join(aa[:6])))
-    for m in sorted(set(CMDLINE_RE.findall(corpus)))[:3]:
-        out.append(Finding("EXEC?", f"suspicious command line: {m.decode(errors='replace')[:100]}"))
+    if t.kind != "SCRIPT":  # script.py owns command-line triage for scripts
+        for m in sorted(set(CMDLINE_RE.findall(corpus)))[:3]:
+            out.append(Finding("EXEC?", f"suspicious command line: {m.decode(errors='replace')[:100]}"))
     return out
