@@ -11,6 +11,46 @@ from .model import CRITICAL
 # REVIEW first, then errors, then unknown, then notes, then ok
 _ORDER = {"REVIEW": 0, "error": 1, "unsigned/unknown": 2, "note": 3, "ok": 4}
 
+# wizard groups: menu key -> (label, extensions)
+_EXT_GROUPS = {
+    "2": ("executables", (".exe", ".dll", ".sys", ".scr", ".cpl", ".ocx", ".mui")),
+    "3": ("scripts", (".ps1", ".bat", ".cmd", ".vbs", ".js", ".jse", ".wsf", ".hta", ".py")),
+    "4": ("documents", (".pdf", ".doc", ".docx", ".xls", ".xlsx", ".ppt", ".pptx")),
+    "5": ("archives", (".zip", ".7z", ".rar", ".cab", ".iso", ".msi")),
+}
+
+
+def _norm_exts(s):
+    """'exe, .DLL' -> ('.dll', '.exe')"""
+    return tuple(sorted({"." + e for e in (p.strip().lower().lstrip(".")
+                                           for p in s.replace(",", " ").split()) if e}))
+
+
+def _ask_filter():
+    """Interactive extension picker. -> (exts or None, label or None).
+    Enter/1 -> None (scan everything - malware hides in odd extensions)."""
+    print("\n  pecheck - what should this pass cover?\n")
+    print("    1) Everything        (recommended - malware hides in odd extensions)")
+    for k, (name, exts) in _EXT_GROUPS.items():
+        print(f"    {k}) {name:16} {' '.join(exts)}")
+    print("    6) Custom            type extensions, e.g. exe, dll")
+    print("\n  Choose 1-6 or combine like 2,4 [1]: ", end="", flush=True)
+    choice = input().strip().lower()
+    if not choice or choice == "1":
+        return None, None
+    picked, custom = [], []
+    for part in choice.replace(",", " ").split():
+        if part in _EXT_GROUPS:
+            picked.append(_EXT_GROUPS[part])
+        elif part == "6":
+            print("    extensions (comma-separated): ", end="", flush=True)
+            custom.extend(_norm_exts(input()))
+        else:
+            print(f"    (ignoring '{part}')")
+    exts = tuple(sorted({e for _, es in picked for e in es} | set(custom)))
+    names = "+".join([n for n, _ in picked] + (["custom"] if custom else []))
+    return (exts, names) if exts else (None, None)
+
 
 def _vt(sha256):
     return f"https://www.virustotal.com/gui/file/{sha256}"
@@ -65,6 +105,8 @@ def print_summary(result):
     if not reports:
         print("  (no files scanned - check the path/pattern)")
         return
+    if result.skipped:
+        print(f"\n  i  Extension filter: {result.skipped} file(s) skipped without a verdict")
     print("\n" + "=" * 70)
     print("SUMMARY")
     print("=" * 70)
@@ -157,6 +199,9 @@ def main(argv=None):
     ap.add_argument("--no-history", action="store_true",
                     help="skip the local scan-history sidecar (~/.config/pecheck/history.json)")
     ap.add_argument("--quiet", action="store_true", help="summary only (suppresses per-file blocks and progress)")
+    ap.add_argument("--ext", metavar="EXTS",
+                    help="only scan these extensions, e.g. --ext exe,dll (skipped files get NO verdict); "
+                         "when omitted on a TTY you'll be asked interactively")
     args = ap.parse_args(argv)
 
     try:
@@ -164,10 +209,18 @@ def main(argv=None):
     except Exception:
         pass
 
+    exts = _norm_exts(args.ext) if args.ext else None
     try:
+        # wizard: interactive TTY + directory target + no explicit filter + human output
+        if (exts is None and not args.json and not args.quiet and sys.stdin.isatty()
+                and any(os.path.isdir(t) for t in args.targets)):
+            exts, names = _ask_filter()
+            if exts:
+                print(f"  -> scanning {names} only - others skipped, not cleared", flush=True)
         result = scan_targets(args.targets, use_sigs=not args.no_sigs,
                               unpack=args.unpack, max_depth=args.max_depth,
-                              use_history=not args.no_history, progress=not args.quiet)
+                              use_history=not args.no_history, progress=not args.quiet,
+                              exts=exts)
     except KeyboardInterrupt:
         print("\ninterrupted", file=sys.stderr)
         return 130
@@ -184,6 +237,7 @@ def main(argv=None):
             "files": [r.to_dict() for r in result.reports],
             "folders": [f.__dict__ for f in result.folders],
             "side_files": result.side_files,
+            "skipped": result.skipped,
         }
         print(json.dumps(payload, indent=1))
     elif not args.quiet:

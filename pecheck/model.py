@@ -94,6 +94,7 @@ class ScanResult:
     reports: list
     side_files: list = field(default_factory=list)
     folders: list = field(default_factory=list)          # [FolderRollup]
+    skipped: int = 0                                     # extension-filtered, no verdict
 
     def __iter__(self):
         return iter(self.reports)

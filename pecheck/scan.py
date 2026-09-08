@@ -148,12 +148,19 @@ def _unpack_pass(parents, use_sigs, max_depth, seen, depth=0, progress=False):
     return added
 
 
-def scan_targets(paths, use_sigs=True, unpack=False, max_depth=1, use_history=True, progress=False):
+def scan_targets(paths, use_sigs=True, unpack=False, max_depth=1, use_history=True, progress=False, exts=None):
     """-> ScanResult over all targets (dirs are walked; every file is scanned).
     Deduplicates identical files, flags near-identical twins (same size +
     TimeDateStamp, different bytes - PE only). unpack: extract containers and
-    re-scan members (max_depth levels of nesting)."""
+    re-scan members (max_depth levels of nesting). exts: tuple of lowercase
+    suffixes like ('.exe', '.dll') - non-matching files are skipped (counted
+    in result.skipped, they get NO verdict)."""
     targets, sibs, side = peparse.collect(paths)
+    skipped = 0
+    if exts:
+        before = len(targets)
+        targets = [p for p in targets if os.path.splitext(p)[1].lower() in exts]
+        skipped = before - len(targets)
     seen = {}
     reports = _scan_list(targets, sibs, _sig_map(targets, use_sigs), seen, progress=progress)
     if unpack:
@@ -161,4 +168,4 @@ def scan_targets(paths, use_sigs=True, unpack=False, max_depth=1, use_history=Tr
     if use_history and reports:
         from . import history
         history.save(history.record(reports))
-    return ScanResult(reports=reports, side_files=side, folders=_rollup(reports, side))
+    return ScanResult(reports=reports, side_files=side, folders=_rollup(reports, side), skipped=skipped)
