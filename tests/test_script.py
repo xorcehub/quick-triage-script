@@ -132,6 +132,11 @@ class TestScripts(CorpusTest):
         self.assertEqual(v, "REVIEW")
         self.assertTrue(any("netcat" in d for d in crit))
 
+    def test_sh_sudo_pipe_review(self):
+        crit, v = self.crit("sudopipe.sh")
+        self.assertEqual(v, "REVIEW")
+        self.assertTrue(any("piped straight into shell" in d for d in crit))
+
     def test_gzipped_b64_payload_review(self):
         crit, v = self.crit("gzpeek.ps1")
         self.assertEqual(v, "REVIEW")

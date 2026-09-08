@@ -17,6 +17,7 @@ PY_EX = (b"exec(", b"eval(", b"compile(", b"__import__", b"os.popen")
 PY_DEC = (b"base64.b64decode", b"b64decode", b"codecs.decode", b"unhexlify",
           b"zlib.decompress", b"marshal.loads", b"pickle.loads")
 SH_DL = (b"curl", b"wget", b"fetch")
+_PIPE_SHELL = (b"|sh", b"|bash", b"|sudosh", b"|sudobash", b"|python", b"|perl")
 _NC_E = re.compile(rb"(?i)(?:^|[\s;&|])(?:nc|ncat)(?:\.exe)?[^\r\n]{0,40}-e[\s/]")  # nc -e /bin/sh
 
 _LNK_CLSID = bytes.fromhex("0114020000000000c000000000000046")
@@ -251,7 +252,7 @@ def _py(t, raw, norm):
 def _sh(t, raw, norm):
     out = []
     dl = _hits(norm, SH_DL)
-    if dl and (b"|sh" in norm or b"|bash" in norm):
+    if dl and any(p in norm for p in _PIPE_SHELL):
         out.append(Finding("SCRIPT!", "curl/wget piped straight into shell", CRITICAL))
     if b"/dev/tcp/" in norm:
         out.append(Finding("SCRIPT!", "bash /dev/tcp/ reverse shell", CRITICAL))
@@ -261,7 +262,7 @@ def _sh(t, raw, norm):
         out.append(Finding("SCRIPT?", "chmod +x onto hidden-dir path"))
     if b"$(curl" in norm or b"$(wget" in norm:
         out.append(Finding("SCRIPT!", "curl/wget command-substitution executed inline", CRITICAL))
-    if b"base64-d" in norm and (b"|sh" in norm or b"|bash" in norm):
+    if b"base64-d" in norm and any(p in norm for p in _PIPE_SHELL):
         out.append(Finding("SCRIPT!", "base64-decoded payload piped into shell", CRITICAL))
     if b"ld.so.preload" in norm:
         out.append(Finding("SCRIPT!", "touches /etc/ld.so.preload (rootkit persistence)", CRITICAL))

