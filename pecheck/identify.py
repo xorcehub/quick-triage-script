@@ -2,7 +2,8 @@
 Zero-offset magic wins; PDF/RTF may carry a small prefix (checked in first 1KB).
 Everything unrecognized falls to DATA (unknown binary) or SCRIPT/TEXT via ext.
 Kinds: PE, DOS, ELF, MACHO, ZIP, SEVENZ, RAR, GZIP, XZ, BZIP2, OLE, RTF, PDF,
-LNK, SCRIPT, TEXT, MEDIA, DATA, EMPTY."""
+LNK, SCRIPT, TEXT, MEDIA, DATA, EMPTY, CAB, RPM, AR, SQUASHFS, TAR, ISO.
+peparse passes a >=0x8808 head so the ISO PVD at 0x8001 is reachable."""
 import os
 import struct
 
@@ -39,7 +40,15 @@ MAGICS = (
     (b"\xff\xfb", "MEDIA"),
     (b"\xff\xf3", "MEDIA"),
     (b"\x1aE\xdf\xa3", "MEDIA"),
+    (b"MSCF", "CAB"),                    # MS cabinet (MSU packages, cracked-game installers)
+    (b"\xed\xab\xee\xdb", "RPM"),
+    (b"!<arch>\n", "AR"),               # .deb / .pkg ar archives
+    (b"hsqs", "SQUASHFS"),
 )
+
+# fixed-offset magics (checked separately: offset != 0)
+_FIXED = ((257, b"ustar", "TAR"),        # ustar magic inside the tar header block
+          (0x8001, b"CD001", "ISO"))     # ISO9660 primary volume descriptor
 
 # magic that may sit anywhere in the first 1KB (formats allowing a prefix)
 _PREFIX_OK = (b"%PDF-", b"{\\rtf")
@@ -55,7 +64,7 @@ def kind(path, head=None):
     if head is None:
         try:
             with open(path, "rb") as f:
-                head = f.read(4096)
+                head = f.read(0x8808)  # >= ISO PVD offset; text/prefix checks cap themselves
         except OSError:
             return "DATA"
     if not head:
@@ -64,6 +73,9 @@ def kind(path, head=None):
         if head.startswith(magic):
             if k == "PE" and not _has_pe_sig(path, head):
                 return "DOS"
+            return k
+    for off, magic, k in _FIXED:
+        if head[off:off + len(magic)] == magic:
             return k
     for magic in _PREFIX_OK:  # junk-prefixed PDF/RTF: magic within first 1KB
         i = head.find(magic, 1, 1024)

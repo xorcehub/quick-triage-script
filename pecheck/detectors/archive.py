@@ -80,7 +80,9 @@ def _zip(t):
     return out
 
 
-_OTHER = {"SEVENZ": "7z", "RAR": "rar", "GZIP": "gzip", "XZ": "xz", "BZIP2": "bzip2"}
+_OTHER = {"SEVENZ": "7z", "RAR": "rar", "GZIP": "gzip", "XZ": "xz", "BZIP2": "bzip2",
+          "CAB": "cab", "RPM": "rpm", "AR": "ar", "SQUASHFS": "squashfs",
+          "TAR": "tar", "ISO": "iso"}
 
 
 def run(t):
