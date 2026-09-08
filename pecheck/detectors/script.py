@@ -6,6 +6,7 @@ decoded and the payload token-scanned (what does it actually do?). LNK gets
 a header check plus command-marker scan over the raw bytes (ANSI + UTF-16)."""
 import base64
 import re
+import zlib
 
 from ..model import Finding, CRITICAL
 
@@ -68,13 +69,23 @@ _PEEK_TOKENS = (b"powershell", b"cmd.exe", b"http://", b"https://", b"invoke-exp
 _B64_RUN = re.compile(rb"[A-Za-z0-9+/]{120,}={0,2}")
 
 
+def _inflate(dec):
+    """base64 payloads are often gzip/deflate-compressed on top: try both, else raw."""
+    for wbits in (47, -15):  # 47 = auto gzip/zlib, -15 = raw deflate
+        try:
+            return zlib.decompress(dec, wbits)
+        except Exception:
+            continue
+    return dec
+
+
 def _b64peek(raw):
     """Decode long base64 runs, token-scan the payload (ascii + utf-16 views)."""
     out = []
     for m in list(_B64_RUN.finditer(raw))[:3]:
         blob = m.group()
         try:
-            dec = base64.b64decode(blob + b"=" * (-len(blob) % 4))
+            dec = _inflate(base64.b64decode(blob + b"=" * (-len(blob) % 4)))
         except Exception:
             continue
         view = (dec[:8192].decode("utf-16-le", "ignore").encode("latin-1", "ignore")

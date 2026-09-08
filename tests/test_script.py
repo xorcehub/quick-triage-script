@@ -102,6 +102,11 @@ class TestScripts(CorpusTest):
         self.assertEqual(v, "REVIEW")
         self.assertTrue(any("reverse-shell" in d for d in crit))
 
+    def test_gzipped_b64_payload_review(self):
+        crit, v = self.crit("gzpeek.ps1")
+        self.assertEqual(v, "REVIEW")
+        self.assertTrue(any("decoded base64 payload" in d for d in crit))
+
     # ---- false-positive side: benign look-alikes stay clean
 
     def test_benign_html_atob_ok(self):
