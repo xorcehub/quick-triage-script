@@ -27,6 +27,8 @@ class Target:
     pe: object = None      # pefile.PE when kind==PE (None on parse error)
     arch: str = None       # x64 | x86 | ARM64 | hex
     error: str = None      # OSError text; PE-parse failure text (kind stays PE)
+    sig: tuple = None       # wintrust result (status, signer); set before detectors run
+    motw: dict = None       # parsed Zone.Identifier ADS (MOTW) - zone/host/referrer/time
     siblings: list = field(default_factory=list)  # lowercase basenames of other files in same dir
 
     @property
@@ -64,7 +66,6 @@ class FileReport:
 
     def to_dict(self):
         d = asdict(self)
-        d.pop("crit", None)
         d["findings"] = [{"severity": f.severity, "category": f.category, "detail": f.detail}
                          for f in sorted(self.findings, key=lambda f: (f.severity != CRITICAL,))]
         if self.sig is not None:

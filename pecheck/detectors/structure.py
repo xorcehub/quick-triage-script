@@ -1,8 +1,7 @@
 """Structure anomalies: overlay, entry point, section sizing,
 packer/packager magic, embedded PEs."""
-import math
-
 from ..model import Finding
+from .sections import shannon
 
 PACKER_SECTIONS = {"upx0", "upx1", "upx2", "upx!", "mpress1", "mpress2",
                    ".aspack", ".adata", ".themida", ".vmp0", ".vmp1", ".enigma1", "pebundle"}
@@ -31,16 +30,6 @@ def _sniff(blob):
     if GO_BUILDINF in head:
         hits.append("Go buildinfo")
     return hits
-
-
-def shannon(data):
-    if not data:
-        return 0.0
-    counts = [0] * 256
-    for b in data:
-        counts[b] += 1
-    n = len(data)
-    return -sum((c / n) * math.log2(c / n) for c in counts if c)
 
 
 def _overlay_regions(pe, raw):

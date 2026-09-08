@@ -1,5 +1,6 @@
 """Verdict computation, decoupled from signature checking.
 REVIEW | note | ok | unsigned/unknown | error. Folder rollup lives here too."""
+import os.path
 from collections import Counter
 
 from .model import FileReport, FolderRollup, CRITICAL
@@ -44,7 +45,6 @@ def rollup(reports, side_files=()):
     for r in reports:
         if r.duplicate_of:  # don't count byte-identical copies twice
             continue
-        import os.path
         groups.setdefault(os.path.dirname(r.path) or ".", []).append(r)
     out = []
     for path in sorted(groups):

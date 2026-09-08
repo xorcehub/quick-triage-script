@@ -4,6 +4,7 @@ Everything unrecognized falls to DATA (unknown binary) or SCRIPT/TEXT via ext.
 Kinds: PE, DOS, ELF, MACHO, ZIP, SEVENZ, RAR, GZIP, XZ, BZIP2, OLE, RTF, PDF,
 LNK, SCRIPT, TEXT, MEDIA, DATA, EMPTY."""
 import os
+import struct
 
 # magic at offset 0 -> kind. Longest match first where prefixes overlap.
 MAGICS = (
@@ -78,7 +79,6 @@ def kind(path, head=None):
 
 def _has_pe_sig(path, head):
     """True if the MZ file has a PE\\0\\0 signature at e_lfanew."""
-    import struct
     if len(head) < 0x40:
         return False
     try:
