@@ -2,7 +2,7 @@
 PDB paths, VS_VERSION_INFO consistency, RT_MANIFEST elevation."""
 import os
 
-from ..model import Finding
+from ..model import Finding, CRITICAL
 
 _DEBUG_CODEVIEW = 2  # IMAGE_DEBUG_TYPE_CODEVIEW
 
@@ -77,6 +77,23 @@ def run(t):
             out.append(Finding("PROV?", "version info present but CompanyName missing"))
     elif not getattr(pe, "DIRECTORY_ENTRY_RESOURCE", None):
         out.append(Finding("PROV?", "no version-info resource (uncommon for shipped software)"))
+
+    # kernel drivers: unsigned/broken signature is categorically worse than usermode.
+    # sig tuple gates (catalog signing returns Valid); cert-table is only the
+    # weak-mode fallback so legit signed drivers don't FP off-Windows.
+    if t.ext == ".sys":
+        cert = pe.OPTIONAL_HEADER.DATA_DIRECTORY[4].VirtualAddress if len(
+            pe.OPTIONAL_HEADER.DATA_DIRECTORY) > 4 else 0
+        if t.sig and t.sig[0] == "Valid":
+            pass
+        elif t.sig:  # NotSigned / HashMismatch / trust-engine error
+            out.append(Finding("PROV!", f"kernel driver signature problem: {t.sig[0]} - "
+                                         "drivers run in ring 0", CRITICAL))
+        elif cert:
+            out.append(Finding("PROV?", "kernel driver; cert table present but validity NOT "
+                                        "verified (weak mode) - verify before loading"))
+        else:
+            out.append(Finding("PROV!", "unsigned kernel driver - drivers run in ring 0", CRITICAL))
 
     man = _manifest_blob(pe)
     if man:

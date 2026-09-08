@@ -12,7 +12,7 @@ GCC = shutil.which("gcc")
 # ---------------------------------------------------------------- crafted PE
 
 def craft_pe(path, machine=0x8664, tds=0x66666666, imports=("SetThreadContext",),
-             dll=b"kernel32.dll", section=b".text", dll_chars=0x2000):
+             dll=b"kernel32.dll", section=b".text", dll_chars=0x2000, cert_dir=False):
     """Minimal but pefile-parseable PE32+ with one section and one import DLL.
     imports=[] -> zero imports (imports-detector CRITICAL). dll_chars DLL flag."""
     raw_pad = 0x400
@@ -70,6 +70,8 @@ def craft_pe(path, machine=0x8664, tds=0x66666666, imports=("SetThreadContext",)
     struct.pack_into("<I", oh, 108 if is64 else 92, 16)  # NumberOfRvaAndSizes
     dd = 112 if is64 else 96
     struct.pack_into("<II", oh, dd + 8, import_rva, import_sz)  # dir 1 = IMPORT
+    if cert_dir:  # fake SECURITY dir pointing past the section (weak-cert tests)
+        struct.pack_into("<II", oh, dd + 32, raw_pad + len(sec_data), 0x200)
     sh = struct.pack("<8sIIIIIIHHI", section, 0x600, sec_rva, len(sec_data),
                      raw_pad, 0, 0, 0, 0, 0x60000020)  # VirtualSize, RVA, RawSize, RawPtr
 
