@@ -5,6 +5,7 @@ import re
 import struct
 
 from ..model import Finding, NOTE
+from ..peparse import dd
 from .strings import URL_RE, IP_RE, CMDLINE_RE
 
 COMIMAGE_FLAGS_STRONGNAMESIGNED = 0x08
@@ -34,8 +35,8 @@ US_EXTRA = re.compile(rb"(?:powershell|cmd\.exe|schtasks|bitsadmin|certutil|msht
 
 def _streams(pe):
     """-> (cor20_flags, {name: (offset, size)}) or None."""
-    d = pe.OPTIONAL_HEADER.DATA_DIRECTORY[14]
-    if not d.Size or not d.VirtualAddress:
+    d = dd(pe, 14)
+    if not d or not d.Size or not d.VirtualAddress:
         return None
     raw = pe.__data__
     try:
@@ -91,7 +92,7 @@ def run(t):
             hits.append((cat, f"{tok} ({note})"))
     if hits:
         strong = any(c in ("NET-DL", "INJECT") for c, _ in hits)
-        sev = "CRITICAL" if any(c in ("NET-DL", "INJECT") for c, _ in hits) else NOTE
+        sev = "CRITICAL" if strong else NOTE
         joined = "; ".join(f"{tok}" for _, tok in hits[:8])
         out.append(Finding("NET-DOTNET" if strong else "DOTNET", f".NET tokens: {joined}", sev))
         if strong and b"DllImportAttribute" in s_heap:

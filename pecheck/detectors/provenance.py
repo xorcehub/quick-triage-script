@@ -3,6 +3,7 @@ PDB paths, VS_VERSION_INFO consistency, RT_MANIFEST elevation."""
 import os
 
 from ..model import Finding, CRITICAL
+from ..peparse import dd
 
 _DEBUG_CODEVIEW = 2  # IMAGE_DEBUG_TYPE_CODEVIEW
 
@@ -111,8 +112,8 @@ def run(t):
     # sig tuple gates (catalog signing returns Valid); cert-table is only the
     # weak-mode fallback so legit signed drivers don't FP off-Windows.
     if t.ext == ".sys":
-        cert = pe.OPTIONAL_HEADER.DATA_DIRECTORY[4].VirtualAddress if len(
-            pe.OPTIONAL_HEADER.DATA_DIRECTORY) > 4 else 0
+        sec = dd(pe, 4)
+        cert = sec.VirtualAddress if sec else 0
         if t.sig and t.sig[0] == "Valid":
             pass
         elif t.sig:  # NotSigned / HashMismatch / trust-engine error
@@ -125,6 +126,7 @@ def run(t):
             out.append(Finding("PROV!", "unsigned kernel driver - drivers run in ring 0", CRITICAL))
 
     # Rich header: compiler fingerprint + forgery cross-checks
+    com = dd(pe, 14)  # COM descriptor (dotnet assemblies may legitimately lack Rich)
     rich = _rich(t.raw, pe.FILE_HEADER.TimeDateStamp)
     if rich:
         prod, build, n, chk = rich
@@ -137,8 +139,7 @@ def run(t):
         if chk and chk != pe.FILE_HEADER.TimeDateStamp:
             out.append(Finding("PROV?", f"Rich checksum ({chk:#x}) != TimeDateStamp "
                                         f"({pe.FILE_HEADER.TimeDateStamp:#x}) - stub edited/repacked"))
-    elif not (pe.OPTIONAL_HEADER.DATA_DIRECTORY[14].Size if len(
-            pe.OPTIONAL_HEADER.DATA_DIRECTORY) > 14 else 0):
+    elif not (com and com.Size):
         out.append(Finding("PROV?", "no Rich header (stripped or non-MSVC toolchain - "
                                     "Go/Rust/deliberate removal are legit)"))
 

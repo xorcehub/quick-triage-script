@@ -2,6 +2,7 @@
 import argparse
 import json
 import os
+import shutil
 import sys
 
 from . import __version__
@@ -312,7 +313,7 @@ def main(argv=None):
     except KeyboardInterrupt:
         print("\ninterrupted", file=sys.stderr)
         return 130
-    if args.unpack and not any(__import__("shutil").which(b) for b in ("7z", "7za", "7zr")):
+    if args.unpack and not any(shutil.which(b) for b in ("7z", "7za", "7zr")):
         print("note: 7z not on PATH - --unpack handled zip containers only "
               "(install 7-zip for rar/7z/iso/cab/installer support)", file=sys.stderr)
     # human output reads best REVIEW-first; JSON keeps scan order

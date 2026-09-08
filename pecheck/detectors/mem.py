@@ -3,6 +3,7 @@ import call-site coverage, encrypted-blob attribution."""
 import struct
 
 from ..model import Finding
+from ..peparse import dd
 
 MEM_APIS = ("VirtualAlloc", "VirtualAllocEx", "VirtualProtect", "VirtualProtectEx",
             "WriteProcessMemory", "CreateRemoteThread", "SetThreadContext", "QueueUserAPC",
@@ -135,7 +136,8 @@ def run(t):
             flags.append(Finding("MEM?", f"{nm}: {n} ROR-13/14 rotates ({clusters} dense windows) - API-hash loops or crypto code"))
     # 3) TLS callbacks
     try:
-        if pe.OPTIONAL_HEADER.DATA_DIRECTORY[9].VirtualAddress:
+        tls_dir = dd(pe, 9)
+        if tls_dir and tls_dir.VirtualAddress:
             st = pe.DIRECTORY_ENTRY_TLS.struct
             arr = st.AddressOfCallBacks
             img = pe.OPTIONAL_HEADER.ImageBase
