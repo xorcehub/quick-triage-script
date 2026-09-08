@@ -8,6 +8,7 @@ a header check plus command-marker scan over the raw bytes (ANSI + UTF-16)."""
 import base64
 import codecs
 import re
+import struct
 import zlib
 
 from ..model import Finding, CRITICAL
@@ -299,6 +300,45 @@ def _url(t, raw, norm):
     return []
 
 
+_ENV_SUB = re.compile(rb"(?i)[%!][a-z0-9_]{2,}:~[-0-9]")  # %windir:~-4% substring syntax
+
+
+def _lnk_struct(raw):
+    """-> (args, icon, machine_id) where parsed, else None. Field walk per
+    MS-SHLLINK; tolerated failure = fall back to the raw blob scan."""
+    try:
+        if len(raw) < 76 or raw[:4] != b"\x4c\x00\x00\x00":
+            return None
+        flags = struct.unpack_from("<I", raw, 20)[0]
+        uni = bool(flags & 0x80)
+        off = 76
+        if flags & 0x1:  # HasLinkTargetIDList
+            off += 2 + struct.unpack_from("<H", raw, off)[0]
+        if flags & 0x2:  # HasLinkInfo
+            off += struct.unpack_from("<I", raw, off)[0]
+
+        def rds(o):
+            n = struct.unpack_from("<H", raw, o)[0]
+            w = 2 if uni else 1
+            txt = raw[o + 2:o + 2 + n * w]
+            return txt.decode("utf-16-le" if uni else "latin-1", "replace"), o + 2 + n * w
+
+        fields = {}
+        for bit, name in ((0x4, "name"), (0x8, "rel"), (0x10, "dir"),
+                          (0x20, "args"), (0x40, "icon")):
+            if flags & bit:
+                fields[name], off = rds(off)
+        mid = b""
+        sig = raw.find(b"\x03\x00\x00\xa0")  # TrackerDataBlock (build machine)
+        if sig >= 0:
+            mid = raw[sig + 8:sig + 24].split(b"\x00")[0]
+            if not all(32 <= c < 127 for c in mid):
+                mid = b""
+        return fields.get("args", ""), fields.get("icon", ""), mid.decode("ascii", "replace")
+    except Exception:
+        return None
+
+
 def _lnk(t, raw):
     out = []
     if len(raw) < 24:
@@ -316,6 +356,11 @@ def _lnk(t, raw):
                            "LNK arguments reference: " + detail, CRITICAL if bad else "note"))
     if b"\\\\" in norm:  # icon/target on remote share: NTLM hash leaks on open
         out.append(Finding("NET?", "LNK references UNC path (credential-leak lure)"))
+    if _ENV_SUB.search(blob):
+        out.append(Finding("OBF!", "env-var substring syntax in args (%var:~-N% name splicing)", CRITICAL))
+    st = _lnk_struct(raw)
+    if st and st[2]:
+        out.append(Finding("PROV", "LNK built on machine: " + st[2]))
     return out
 
 

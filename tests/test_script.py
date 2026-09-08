@@ -258,6 +258,17 @@ class TestScripts(CorpusTest):
         r = self.report("game.lnk")
         self.assertNotEqual(r.verdict, "REVIEW")
 
+    def test_lnk_tracker_machine_provenance(self):
+        r = self.report("tracked.lnk")
+        self.assertTrue(any("built on machine" in f.detail and "DESKTOP-EVIL42" in f.detail
+                            for f in r.findings))
+        self.assertEqual(r.verdict, "REVIEW")   # powershell -enc args
+
+    def test_lnk_envvar_splice_obfuscation(self):
+        crit, v = self.crit("envvar.lnk")
+        self.assertEqual(v, "REVIEW")
+        self.assertTrue(any("substring syntax" in d for d in crit))
+
 
 if __name__ == "__main__":
     unittest.main()

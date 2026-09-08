@@ -92,6 +92,25 @@ def craft_forged_pe(path):
     return path
 
 
+def craft_lnk_full(path, args, icon="", machine=""):
+    """Proper MS-SHLLINK walk: unicode counted strings + tracker block."""
+    clsid = bytes.fromhex("0114020000000000c000000000000046")
+    h = bytearray(76)
+    flags = 0x20 | 0x40 | 0x80                      # args + icon + unicode
+    struct.pack_into("<I", h, 20, flags)
+    def cs(txt):                                    # CountedString
+        b = txt.encode("utf-16-le")
+        return struct.pack("<H", len(txt)) + b
+    body = cs(args) + cs(icon)
+    tracker = b""
+    if machine:
+        tracker = (struct.pack("<III", 0x60, 0xA0000003, 0x60)
+                   + machine.encode().ljust(16, b"\x00")[:16] + b"\x00" * 48)
+    with open(path, "wb") as f:
+        f.write(struct.pack("<I", 0x4C) + clsid + bytes(h[20:]) + body + tracker)
+    return path
+
+
 def craft_lnk(path, args=b"powershell -w hidden -enc AAAAAAAA", good_clsid=True):
     clsid = bytes.fromhex("0114020000000000c000000000000046") if good_clsid else b"\x11" * 16
     h = bytearray(76)
@@ -296,6 +315,11 @@ def build_folder(root):
                 b"tar -xzf /tmp/data.tar.gz\n")
     craft_lnk(os.path.join(root, "readme.lnk"))
     craft_lnk(os.path.join(root, "game.lnk"), args=b"C:\\Games\\game.exe", good_clsid=True)
+    craft_lnk_full(os.path.join(root, "tracked.lnk"),
+                   args="powershell -w hidden -enc AAAAAAAA", icon="shell32,2",
+                   machine="DESKTOP-EVIL42")
+    craft_lnk_full(os.path.join(root, "envvar.lnk"),
+                   args="%windir:~-4%\\..\\evil.exe", machine="PC-OF-DOOM")
 
     # docs
     w("exploit.pdf", b"%PDF-1.7\n1 0 obj<</OpenAction 9 0 R/JavaScript 9 0 R>>endobj\n%%EOF\n")
