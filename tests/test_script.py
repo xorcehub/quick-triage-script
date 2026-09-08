@@ -131,6 +131,11 @@ class TestScripts(CorpusTest):
         self.assertEqual(r.kind, "SCRIPT")
         self.assertTrue(any("UNC" in f.detail for f in r.findings))
 
+    def test_settingcontent_entity_hidden_review(self):
+        crit, v = self.crit("entity.settingcontent-ms")
+        self.assertEqual(v, "REVIEW")
+        self.assertTrue(any("settingcontent-ms" in d for d in crit))
+
     def test_settingcontent_ms_args_review(self):
         crit, v = self.crit("evil.settingcontent-ms")
         self.assertEqual(v, "REVIEW")
