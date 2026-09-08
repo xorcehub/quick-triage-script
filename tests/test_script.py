@@ -260,6 +260,12 @@ class TestScripts(CorpusTest):
         r = self.report("good.url")
         self.assertNotEqual(r.verdict, "REVIEW")
 
+    def test_iso_identified_and_extractable(self):
+        r = self.report("lure.iso")
+        self.assertEqual(r.kind, "ISO")
+        from pecheck.unpack import EXTRACTABLE
+        self.assertIn("ISO", EXTRACTABLE)   # --unpack opens it when 7z is present
+
     def test_url_trait_scoring(self):
         r = self.report("phishy.url")
         self.assertNotEqual(r.verdict, "ok")
