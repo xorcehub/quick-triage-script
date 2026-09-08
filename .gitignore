@@ -3,4 +3,6 @@
 *.dll
 __pycache__/
 *.pyc
+build/
+*.egg-info/
 docs/
