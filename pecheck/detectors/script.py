@@ -26,6 +26,21 @@ _NORM_WS = re.compile(b"[\\s`^\"'+]+")  # ws + PS backtick + cmd caret, plus quo
 # stripped so concat obfuscation ("ie"+"x") re-joins for marker matching
 
 
+def _strip_comments(raw):
+    """Drop full-line comments (PS #, VBS ', JS/PHP //, bat ::/REM) and block
+    comments (<##>, /**/): markers inside comments are documentation, not
+    behavior - stripping them kills the comment-FP class. Inline # stays."""
+    raw = re.sub(rb"<#.*?#>", b"", raw, flags=re.S)
+    raw = re.sub(rb"/\*.*?\*/", b"", raw, flags=re.S)
+    out = []
+    for ln in raw.splitlines():
+        ls = ln.lstrip()
+        if ls.startswith((b"#", b"'", b"//", b"::")) or ls.lower().startswith((b"rem ", b"rem	")):
+            continue
+        out.append(ln)
+    return b"\n".join(out)
+
+
 def _norm(raw):
     n = _NORM_WS.sub(b"", raw).lower()
     if b"\x00" in raw[:512]:  # utf-16le saves: decode so markers still match
@@ -401,14 +416,14 @@ def run(t):
         head = t.raw[:256]
         if head[:2] == b"#!":  # shebang -> route by interpreter (default sh)
             h = _py if b"python" in head.splitlines()[0] else _sh
-            n = _norm(t.raw)
+            n = _norm(_strip_comments(t.raw))
             return h(t, t.raw, n) + _persist(n)
         if b"<?php" in head:
-            return _php(t, t.raw, _norm(t.raw))
+            return _php(t, t.raw, _norm(_strip_comments(t.raw)))
         return []
     if t.kind != "SCRIPT":
         return []
-    norm = _norm(t.raw)
+    norm = _norm(_strip_comments(t.raw))
     h = _H.get(t.ext)
     out = h(t, t.raw, norm) if h else []
     return out + _persist(norm) + _peek(t.raw)

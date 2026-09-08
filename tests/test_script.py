@@ -38,6 +38,10 @@ class TestScripts(CorpusTest):
     def test_benign_bat_ok(self):
         self.assertEqual(self.report("benign.bat").verdict, "ok")
 
+    def test_markers_only_in_comments_stay_ok(self):
+        self.assertEqual(self.report("docs.ps1").verdict, "ok")
+        self.assertEqual(self.report("docs.bat").verdict, "ok")
+
     def test_vbs_dropper_trio_review(self):
         crit, v = self.crit("dropper.vbs")
         self.assertEqual(v, "REVIEW")
