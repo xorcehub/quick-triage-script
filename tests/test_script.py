@@ -38,6 +38,16 @@ class TestScripts(CorpusTest):
     def test_benign_bat_ok(self):
         self.assertEqual(self.report("benign.bat").verdict, "ok")
 
+    def test_ps_staged_dropper_note(self):
+        r = self.report("stager.ps1")
+        self.assertEqual(r.verdict, "note")
+        self.assertTrue(any("staged dropper" in f.detail for f in r.findings))
+
+    def test_sh_staged_chmod_note(self):
+        r = self.report("stager.sh")
+        self.assertEqual(r.verdict, "note")
+        self.assertTrue(any("staged binary" in f.detail for f in r.findings))
+
     def test_sibling_reference_note(self):
         r = self.report("launch.bat")
         self.assertEqual(r.verdict, "note")   # note-level, not REVIEW

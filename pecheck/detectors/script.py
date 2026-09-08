@@ -71,6 +71,7 @@ PS_DL = (b"downloadstring", b"downloadfile", b"downloaddata", b"invoke-webreques
          b"start-bitstransfer")
 PS_EX = (b"invoke-expression", b"iex", b"start-process", b"&(")
 PS_DEC = (b"frombase64string", b"-encodedcommand", b"-enc", b"gzipstream", b"deflatestream")
+PS_STAGE = (b"set-content", b"out-file", b"add-content", b"writeallbytes", b"writealltext")
 _A1 = b"amsi" + b"init" + b"failed"
 _A2 = b"amsi" + b"utils"
 PS_TAMPER = (_A1, _A2, b"set-mppreference", b"add-mppreference",
@@ -248,6 +249,8 @@ def _ps1(t, raw, norm):
         out.append(Finding("SCRIPT!", "powershell download+execute: " + ", ".join(dl[:3]) + " + " + ex[0], CRITICAL))
     elif dec and ex:
         out.append(Finding("SCRIPT!", "powershell decode+execute: " + dec[0] + " + " + ex[0], CRITICAL))
+    elif dl and _hits(norm, PS_STAGE):
+        out.append(Finding("SCRIPT?", "downloader + file write: staged dropper (" + dl[0] + ")"))
     elif dl:
         out.append(Finding("NET-DL", "powershell downloader tokens: " + ", ".join(dl[:3])))
     tamp = _hits(norm, PS_TAMPER)
@@ -272,6 +275,8 @@ def _vbsjs(t, raw, norm):
     net, ex = _hits(norm, VBS_NET), _hits(norm, VBS_EX)
     if net and any(e in ex for e in ("savetofile", ".run(", "shellexecute")):
         out.append(Finding("SCRIPT!", "dropper trio: " + net[0] + " + " + ex[0], CRITICAL))
+    elif net and b"createtextfile(" in norm:
+        out.append(Finding("SCRIPT?", "net fetch + CreateTextFile: staged write (" + net[0] + ")"))
     elif any(e in ex for e in ("wscript.shell", "createobject(")):
         out.append(Finding("SCRIPT?", "wscript/shell object creation"))
     if raw[:4] == b"#@~^":
@@ -423,6 +428,8 @@ def _sh(t, raw, norm):
         out.append(Finding("SCRIPT!", "netcat/socat -e reverse shell", CRITICAL))
     if b"chmodx" in norm and (b"~/." in norm or b"/tmp/." in norm):  # '+' stripped in norm
         out.append(Finding("SCRIPT?", "chmod +x onto hidden-dir path"))
+    elif dl and b"chmodx" in norm:
+        out.append(Finding("SCRIPT?", "downloader + chmod: staged binary (" + dl[0] + ")"))
     if b"$(curl" in norm or b"$(wget" in norm:
         out.append(Finding("SCRIPT!", "curl/wget command-substitution executed inline", CRITICAL))
     if b"base64-d" in norm and any(p in norm for p in _PIPE_SHELL):

