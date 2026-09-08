@@ -6,6 +6,13 @@ import re
 
 from ..model import Finding, CRITICAL
 
+PY_DL = (b"urllib.request", b"urlopen", b"requests.get", b"requests.post",
+         b"socket.socket", b"http.client")
+PY_EX = (b"exec(", b"eval(", b"compile(", b"__import__", b"os.popen")
+PY_DEC = (b"base64.b64decode", b"b64decode", b"codecs.decode", b"unhexlify",
+          b"zlib.decompress", b"marshal.loads", b"pickle.loads")
+SH_DL = (b"curl", b"wget", b"fetch")
+
 _LNK_CLSID = bytes.fromhex("0114020000000000c000000000000046")
 _NORM_WS = re.compile(rb"\s+")
 
@@ -125,7 +132,37 @@ def _lnk(t, raw):
     return out
 
 
+def _py(t, raw, norm):
+    out = []
+    dl = _hits(norm, PY_DL)
+    ex = _hits(norm, PY_EX)
+    dec = _hits(norm, PY_DEC)
+    if dl and ex:
+        out.append(Finding("SCRIPT!", "python download+execute: " + ", ".join(dl[:3])
+                           + " + " + ex[0], CRITICAL))
+    elif dec and ex:
+        out.append(Finding("SCRIPT!", "python decode+execute: " + dec[0] + " + " + ex[0], CRITICAL))
+    elif dl and b"subprocess" in norm:
+        out.append(Finding("NET-DL", "python downloader tokens + subprocess: " + ", ".join(dl[:3])))
+    if b"os.system" in norm and b"chmod" in norm:
+        out.append(Finding("SCRIPT?", "os.system + chmod (staged execution)"))
+    return out
+
+
+def _sh(t, raw, norm):
+    out = []
+    dl = _hits(norm, SH_DL)
+    if dl and (b"|sh" in norm or b"|bash" in norm):
+        out.append(Finding("SCRIPT!", "curl/wget piped straight into shell", CRITICAL))
+    if b"/dev/tcp/" in norm:
+        out.append(Finding("SCRIPT!", "bash /dev/tcp/ reverse shell", CRITICAL))
+    if b"chmod+x" in norm and (b"~/." in norm or b"/tmp/." in norm):
+        out.append(Finding("SCRIPT?", "chmod +x onto hidden-dir path"))
+    return out
+
+
 _H = {".ps1": _ps1, ".psm1": _ps1, ".bat": _bat, ".cmd": _bat, ".vbs": _vbsjs,
+      ".py": _py, ".sh": _sh,
       ".vbe": _vbsjs, ".js": _vbsjs, ".jse": _vbsjs, ".hta": _hta, ".reg": _reg,
       ".url": _url}
 
