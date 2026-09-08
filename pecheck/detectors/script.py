@@ -288,7 +288,7 @@ def run(t):
         return []
     if t.kind == "LNK":
         return _lnk(t, t.raw) + _b64peek(t.raw)
-    if t.ext in (".html", ".htm"):  # kind TEXT: html smuggling is script territory
+    if t.ext in (".html", ".htm", ".mht", ".xhtml"):  # kind TEXT: html smuggling is script territory
         return _html(t, t.raw, _norm(t.raw))
     if t.kind != "SCRIPT":
         return []

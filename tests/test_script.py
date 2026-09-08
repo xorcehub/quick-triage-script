@@ -92,6 +92,16 @@ class TestScripts(CorpusTest):
         self.assertEqual(v, "REVIEW")
         self.assertTrue(any("smuggling" in d for d in crit))
 
+    def test_mht_smuggling_review(self):
+        crit, v = self.crit("smuggle.mht")
+        self.assertEqual(v, "REVIEW")
+        self.assertTrue(any("smuggling" in d for d in crit))
+
+    def test_xhtml_smuggling_review(self):
+        crit, v = self.crit("smuggle.xhtml")
+        self.assertEqual(v, "REVIEW")
+        self.assertTrue(any("smuggling" in d for d in crit))
+
     def test_sh_command_substitution_review(self):
         crit, v = self.crit("pipe.sh")
         self.assertEqual(v, "REVIEW")
