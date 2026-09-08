@@ -122,6 +122,16 @@ class TestScripts(CorpusTest):
         self.assertEqual(v, "REVIEW")
         self.assertTrue(any("ImagePath" in d for d in crit))
 
+    def test_ps_tcpclient_revshell_review(self):
+        crit, v = self.crit("tcpclient.ps1")
+        self.assertEqual(v, "REVIEW")
+        self.assertTrue(any("reverse-shell" in d for d in crit))
+
+    def test_sh_nc_e_revshell_review(self):
+        crit, v = self.crit("ncshell.sh")
+        self.assertEqual(v, "REVIEW")
+        self.assertTrue(any("netcat" in d for d in crit))
+
     def test_gzipped_b64_payload_review(self):
         crit, v = self.crit("gzpeek.ps1")
         self.assertEqual(v, "REVIEW")
