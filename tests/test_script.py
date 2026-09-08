@@ -38,6 +38,12 @@ class TestScripts(CorpusTest):
     def test_benign_bat_ok(self):
         self.assertEqual(self.report("benign.bat").verdict, "ok")
 
+    def test_sibling_reference_note(self):
+        r = self.report("launch.bat")
+        self.assertEqual(r.verdict, "note")   # note-level, not REVIEW
+        self.assertTrue(any("sibling" in f.detail and "readme.lnk" in f.detail
+                            for f in r.findings))
+
     def test_markers_only_in_comments_stay_ok(self):
         self.assertEqual(self.report("docs.ps1").verdict, "ok")
         self.assertEqual(self.report("docs.bat").verdict, "ok")

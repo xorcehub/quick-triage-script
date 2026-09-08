@@ -205,6 +205,22 @@ def _peek(raw):
     return out
 
 
+def _sibling_refs(t, raw):
+    """Script names an executable that actually sits next to it: staging link."""
+    if not t.siblings:
+        return []
+    base = t.basename.lower()
+    hits = set()
+    for m in _SIB_REF.finditer(raw[:65536]):
+        n = m.group().decode("latin-1", "replace").strip().lower()
+        if n != base and n in t.siblings:
+            hits.add(n)
+    if hits:
+        return [Finding("SCRIPT?", "references sibling file(s) present here: "
+                        + ", ".join(sorted(hits)[:4]))]
+    return []
+
+
 def _persist(norm):
     """Persistence markers valid for any script kind."""
     out = []
@@ -308,6 +324,8 @@ def _url(t, raw, norm):
         return [Finding("NET?", ".url references UNC path (credential-leak lure)")]
     return []
 
+
+_SIB_REF = re.compile(rb"(?i)[a-z0-9_][a-z0-9_.-]{0,59}\.(?:exe|dll|scr|msi|bat|cmd|ps1|vbs|js|jse|hta|jar|lnk|py)\b")
 
 _ENV_SUB = re.compile(rb"(?i)[%!][a-z0-9_]{2,}:~[-0-9]")  # %windir:~-4% substring syntax
 
@@ -482,4 +500,4 @@ def run(t):
         norm += _norm(_xview(t.raw))
     h = _H.get(t.ext)
     out = h(t, t.raw, norm) if h else []
-    return out + _persist(norm) + _peek(t.raw)
+    return out + _persist(norm) + _peek(t.raw) + _sibling_refs(t, t.raw)
