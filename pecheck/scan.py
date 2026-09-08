@@ -3,6 +3,7 @@ ALL detectors are PE-only (self-gated); GENERIC detectors run on every file
 kind. Cross-file signals (duplicates, near-identical twins) run after the
 per-file pass. Verdict logic lives in verdict.py."""
 import os
+import shutil
 from collections import defaultdict
 
 from . import peparse
@@ -63,19 +64,36 @@ def scan_file(path, sig=None):
     return _scan_target(t, (), sig)
 
 
-def scan_targets(paths, use_sigs=True):
-    """-> ScanResult over all targets (dirs are walked; every file is scanned).
-    Deduplicates identical files, flags near-identical twins (same size +
-    TimeDateStamp, different bytes - PE only)."""
-    targets, sibs, side = peparse.collect(paths)
-    sigs = None
-    if use_sigs:
-        from .wintrust import sigs_via_wintrust
-        sig_paths = [p for p in targets if p.lower().endswith(
-            (".exe", ".dll", ".scr", ".sys", ".ocx", ".cpl", ".mui"))]
-        sigs = sigs_via_wintrust(sig_paths) if sig_paths else None
-    reports, seen, meta = [], {}, {}
-    for i, p in enumerate(targets):
+def _sig_map(paths, use_sigs):
+    """-> {normcase abspath: (status, signer)} or None."""
+    if not use_sigs:
+        return None
+    from .wintrust import sigs_via_wintrust
+    sig_paths = [p for p in paths if p.lower().endswith(
+        (".exe", ".dll", ".scr", ".sys", ".ocx", ".cpl", ".mui"))]
+    return sigs_via_wintrust(sig_paths) if sig_paths else None
+
+
+def _twins(reports, meta):
+    """near-identical twins: same size + same compile timestamp, different content."""
+    groups = defaultdict(list)
+    for p, (size, tds, sha) in meta.items():
+        if size and tds:
+            groups[(size, tds)].append((p, sha))
+    for (size, tds), members in groups.items():
+        if len(members) > 1 and len({m[1] for m in members}) > 1:
+            for p, _ in members:
+                other = next(n for n, _ in members if n != p)
+                rep = next(r for r in reports if r.path == p)
+                rep.findings.append(Finding(
+                    "PROV?", f"near-duplicate of {os.path.basename(other)}: same size+TimeDateStamp, "
+                             f"different bytes (patched/tampered twin?)"))
+
+
+def _scan_list(targets, sibs, sigs, seen):
+    """Scan every target path; `seen` dedups across the whole scan (incl. --unpack)."""
+    reports, meta = [], {}
+    for p in targets:
         t = peparse.load(p)
         if t.sha256 and t.sha256 in seen:
             first = seen[t.sha256]
@@ -90,17 +108,45 @@ def scan_targets(paths, use_sigs=True):
         if t.pe is not None:
             meta[t.path] = (t.size, t.pe.FILE_HEADER.TimeDateStamp, t.sha256)
         reports.append(rep)
-    # near-identical twins: same size + same compile timestamp, different content
-    groups = defaultdict(list)
-    for p, (size, tds, sha) in meta.items():
-        if size and tds:
-            groups[(size, tds)].append((p, sha))
-    for (size, tds), members in groups.items():
-        if len(members) > 1 and len({m[1] for m in members}) > 1:
-            for p, _ in members:
-                other = next(n for n, _ in members if n != p)
-                rep = next(r for r in reports if r.path == p)
-                rep.findings.append(Finding(
-                    "PROV?", f"near-duplicate of {os.path.basename(other)}: same size+TimeDateStamp, "
-                             f"different bytes (patched/tampered twin?)"))
+    _twins(reports, meta)
+    return reports
+
+
+def _unpack_pass(parents, use_sigs, max_depth, seen, depth=0):
+    """Extract containers (7z for exotic kinds/installers, zipfile for ZIP),
+    re-scan children with parent links. depth-capped, temp dirs always cleaned."""
+    from . import unpack as _u
+    added = []
+    for r in parents:
+        if r.duplicate_of or r.verdict == "error":
+            continue
+        if r.kind not in _u.EXTRACTABLE and r.kind != "PE":
+            continue
+        tmp = _u.extract(r.path, r.kind)
+        if tmp is None:
+            continue
+        try:
+            kid_paths, kid_sibs = _u.find_targets(tmp)
+            kids = _scan_list(kid_paths, kid_sibs, _sig_map(kid_paths, use_sigs), seen)
+            for k in kids:
+                k.parent = r.path
+                k.findings.insert(0, Finding("NOTE", f"extracted from {os.path.basename(r.path)}"))
+            added.extend(kids)
+            if depth + 1 < max_depth:
+                added.extend(_unpack_pass(kids, use_sigs, max_depth, seen, depth + 1))
+        finally:
+            shutil.rmtree(tmp, ignore_errors=True)
+    return added
+
+
+def scan_targets(paths, use_sigs=True, unpack=False, max_depth=1):
+    """-> ScanResult over all targets (dirs are walked; every file is scanned).
+    Deduplicates identical files, flags near-identical twins (same size +
+    TimeDateStamp, different bytes - PE only). unpack: extract containers and
+    re-scan members (max_depth levels of nesting)."""
+    targets, sibs, side = peparse.collect(paths)
+    seen = {}
+    reports = _scan_list(targets, sibs, _sig_map(targets, use_sigs), seen)
+    if unpack:
+        reports += _unpack_pass(reports, use_sigs, max_depth, seen)
     return ScanResult(reports=reports, side_files=side, folders=_rollup(reports, side))
