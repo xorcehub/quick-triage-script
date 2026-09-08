@@ -136,6 +136,19 @@ def _unfold(dec):
     return dec
 
 
+def _xor_sweep(head):
+    """First single-byte-XOR view that shows >=2 marker tokens, else empty.
+    Classic strings-with-xor: stops at the first revealing key, no report
+    on lone short-token luck (random data occasionally shows one)."""
+    toks = [p for p in _PEEK_TOKENS if len(p) >= 6]  # skip 4-5 char luck magnets
+    for k in range(1, 256):
+        v = head.translate(bytes(i ^ k for i in range(256)))
+        hits = [p.decode() for p in toks if p in v]
+        if len(hits) >= 2:
+            return v
+    return b""
+
+
 def _scan_payload(label, dec, seen, out):
     """Unfold+inflate, token-scan (ascii + utf-16 + rot13 views), emit finding."""
     dec = _unfold(_inflate(dec))
@@ -148,6 +161,7 @@ def _scan_payload(label, dec, seen, out):
         view += codecs.encode(head.decode("latin-1", "ignore"), "rot13").encode("latin-1", "ignore")
     except Exception:
         pass
+    view += _xor_sweep(head)
     hits = [p.decode() for p in _PEEK_TOKENS if p in view]
     if dec[:2] == b"MZ":
         hits.insert(0, "MZ executable")

