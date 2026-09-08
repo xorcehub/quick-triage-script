@@ -12,6 +12,7 @@ MAGICS = (
     (b"MZ", "PE"),                       # confirmed PE below, else DOS
     (b"\x7fELF", "ELF"),
     (b"\xcf\xfa\xed\xfe", "MACHO"),
+    (b"\xfe\xed\xfa\xcf", "MACHO"),     # 64-bit big-endian
     (b"\xca\xfe\xba\xbe", "MACHO"),
     (b"\xfe\xed\xfa\xce", "MACHO"),
     (b"\xce\xfa\xed\xfe", "MACHO"),
