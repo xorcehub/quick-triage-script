@@ -55,7 +55,7 @@ _FIXED = ((257, b"ustar", "TAR"),        # ustar magic inside the tar header blo
 _PREFIX_OK = (b"%PDF-", b"{\\rtf")
 
 SCRIPT_EXTS = (".ps1", ".psm1", ".bat", ".cmd", ".vbs", ".vbe", ".js", ".jse",
-               ".hta", ".reg", ".sh", ".py", ".url")
+               ".hta", ".reg", ".sh", ".py", ".pyw", ".url", ".wsf", ".sct")
 TEXT_EXTS = (".txt", ".nfo", ".diz", ".ini", ".cfg", ".json", ".xml", ".html",
              ".htm", ".csv", ".log", ".md")
 
