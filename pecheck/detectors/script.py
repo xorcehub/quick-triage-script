@@ -258,7 +258,7 @@ def _sh(t, raw, norm):
         out.append(Finding("SCRIPT!", "bash /dev/tcp/ reverse shell", CRITICAL))
     if _NC_E.search(raw) or (b"socat" in norm and b"exec:" in norm):
         out.append(Finding("SCRIPT!", "netcat/socat -e reverse shell", CRITICAL))
-    if b"chmod+x" in norm and (b"~/." in norm or b"/tmp/." in norm):
+    if b"chmodx" in norm and (b"~/." in norm or b"/tmp/." in norm):  # '+' stripped in norm
         out.append(Finding("SCRIPT?", "chmod +x onto hidden-dir path"))
     if b"$(curl" in norm or b"$(wget" in norm:
         out.append(Finding("SCRIPT!", "curl/wget command-substitution executed inline", CRITICAL))
