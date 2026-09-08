@@ -53,6 +53,9 @@ class FileReport:
     sections: list = field(default_factory=list)   # (name, entropy, kb)
     findings: list = field(default_factory=list)   # [Finding]
     verdict: str = None             # REVIEW | note | ok | unsigned/unknown | error
+    imphash: str = None             # pefile import hash (PE only, "" on failure)
+    motw: dict = None               # parsed Zone.Identifier ADS (any kind)
+    parent: str = None              # archive this file was extracted from (--unpack)
     weak_cert: tuple = None         # (signer strings, notAfter str) when sig check unavailable
     duplicate_of: str = None        # path of the byte-identical file we deduped against
 

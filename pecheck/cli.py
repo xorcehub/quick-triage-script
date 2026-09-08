@@ -24,7 +24,8 @@ def print_report(r):
     if r.duplicate_of:
         print(f"  byte-identical to {r.duplicate_of} (deduplicated)")
         return
-    print(f"  kind={r.kind}  arch={r.arch or '-'}  size={r.size:,}  sha256={r.sha256[:16]}...")
+    print(f"  kind={r.kind}  arch={r.arch or '-'}  size={r.size:,}  sha256={r.sha256[:16]}..."
+          + (f"  imphash={r.imphash}" if r.imphash else ""))
     if r.kind == "PE" or r.signed or r.sig:
         if r.sig:
             s, who = r.sig

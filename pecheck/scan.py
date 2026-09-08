@@ -30,6 +30,10 @@ def _scan_target(t, siblings, sig):
             r.signed = bool(pe.OPTIONAL_HEADER.DATA_DIRECTORY[4].VirtualAddress)  # SECURITY dir
         except (IndexError, AttributeError):
             r.signed = False  # truncated NumberOfRvaAndSizes
+        try:
+            r.imphash = pe.get_imphash() or ""
+        except Exception:
+            r.imphash = ""
 
     for det in ALL + GENERIC:
         try:
@@ -67,7 +71,8 @@ def scan_targets(paths, use_sigs=True):
     sigs = None
     if use_sigs:
         from .wintrust import sigs_via_wintrust
-        sig_paths = [p for p in targets if p.lower().endswith((".exe", ".dll", ".scr"))]
+        sig_paths = [p for p in targets if p.lower().endswith(
+            (".exe", ".dll", ".scr", ".sys", ".ocx", ".cpl", ".mui"))]
         sigs = sigs_via_wintrust(sig_paths) if sig_paths else None
     reports, seen, meta = [], {}, {}
     for i, p in enumerate(targets):
