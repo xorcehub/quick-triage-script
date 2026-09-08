@@ -26,6 +26,11 @@ def print_report(r):
         return
     print(f"  kind={r.kind}  arch={r.arch or '-'}  size={r.size:,}  sha256={r.sha256[:16]}..."
           + (f"  imphash={r.imphash}" if r.imphash else ""))
+    if r.motw:
+        bits = [f"zone={r.motw.get('zone', '?')}"]
+        if r.motw.get("host"):
+            bits.append(f"from={r.motw['host'][:80]}")
+        print("  motw: " + "  ".join(bits))
     if r.kind == "PE" or r.signed or r.sig:
         if r.sig:
             s, who = r.sig
@@ -111,6 +116,15 @@ def print_summary(result):
         print("\n  i  Unsigned / signature not verified (not necessarily bad, just unproven):")
         for r in unknown:
             print(f"     {os.path.basename(r.path):45} vt: {_vt(r.sha256)}")
+
+    downloads = [r for r in reports if r.motw and (r.motw.get("host") or r.motw.get("referrer"))]
+    if downloads:
+        print(f"\n  i  Download provenance (MOTW), {len(downloads)} file(s):")
+        for r in downloads[:10]:
+            src = r.motw.get("host") or r.motw.get("referrer") or "?"
+            print(f"     {os.path.basename(r.path):40} {src[:70]}")
+        if len(downloads) > 10:
+            print(f"     ... +{len(downloads) - 10} more")
 
     if result.side_files:
         print("\n  i  Context files present (scene markers / MOTW artifacts):")
