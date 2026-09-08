@@ -185,9 +185,9 @@ def _hta(t, raw, norm):
 _REG_HIJACKS = (  # (label, tokens that must all be present in norm)
     ("Winlogon Shell hijack", (b"currentversion\\winlogon", b"shell=")),
     ("Winlogon UserInit hijack", (b"currentversion\\winlogon", b"userinit=")),
-    ("AppInit_DLLs hijack", (b"appinit_dlls=")),
+    ("AppInit_DLLs hijack", (b"appinit_dlls=",)),
     ("service ImagePath hijack", (b"currentcontrolset\\services", b"imagepath=")),
-    ("Active Setup StubPath", (b"stubpath=")),
+    ("Active Setup StubPath", (b"stubpath=",)),
 )
 
 
