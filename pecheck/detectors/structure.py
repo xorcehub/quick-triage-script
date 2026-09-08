@@ -1,6 +1,7 @@
 """Structure anomalies: overlay, entry point, section sizing,
 packer/packager magic, embedded PEs."""
 from ..model import Finding
+from ..peparse import dd
 from .sections import shannon
 
 PACKER_SECTIONS = {"upx0", "upx1", "upx2", "upx!", "mpress1", "mpress2",
@@ -146,6 +147,7 @@ def run(t):
 
     # EXE with exports (rare; dual-mode/installer/proxy)
     is_dll = bool(pe.FILE_HEADER.Characteristics & 0x2000)
-    if not is_dll and pe.OPTIONAL_HEADER.DATA_DIRECTORY[0].VirtualAddress:
+    exp = dd(pe, 0)
+    if not is_dll and exp and exp.VirtualAddress:
         out.append(Finding("STRUCT", "executable exports functions (dual-mode/installer or export proxy)"))
     return out

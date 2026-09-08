@@ -56,7 +56,7 @@ class FileReport:
     imphash: str = None             # pefile import hash (PE only, "" on failure)
     motw: dict = None               # parsed Zone.Identifier ADS (any kind)
     parent: str = None              # archive this file was extracted from (--unpack)
-    weak_cert: tuple = None         # (signer strings, notAfter str) when sig check unavailable
+    weak_cert: tuple = None         # (signer strings, notAfter 'YYYY-MM-DD', expired bool)
     duplicate_of: str = None        # path of the byte-identical file we deduped against
 
     @property

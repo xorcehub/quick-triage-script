@@ -8,11 +8,10 @@ import re
 
 from ..model import Finding, CRITICAL
 
-import re as _re
 SCENE = ("codex", "skidrow", "plaza", "hoodlum", "empress",
          "tenoke", "fitgirl", "dodi", "online-fix",
          "keygen", "nocd", "crack", "cracked")
-_SCENE_RX = _re.compile(r"\b(?:" + "|".join(_re.escape(s) for s in SCENE) + r")\b")
+_SCENE_RX = re.compile(r"\b(?:" + "|".join(re.escape(s) for s in SCENE) + r")\b")
 REDIST = ("vcredist", "vc_redist", "directx", "dxsetup", "dotnet", "oalinst",
           "ueprereqsetup", "_commonredist")
 EMU_MARKS = (b"goldberg", b"creamapi", b"smartsteamemu", b"spacewar")
@@ -63,8 +62,8 @@ def run(t):
         out.append(Finding("EVADE!", f"bidi override char in filename '{shown}': "
                                      "displayed name lies about the real extension", CRITICAL))
 
-    if _SCENE_RX.search("/".join(parts[:-1])):
-        m = _SCENE_RX.search("/".join(parts[:-1]))
+    m = _SCENE_RX.search("/".join(parts[:-1]))
+    if m:
         out.append(Finding("CONTEXT", f"scene/crack marker in path: {m.group()} "
                                       "- pirated-release context, raise suspicion of bundled malware"))
 

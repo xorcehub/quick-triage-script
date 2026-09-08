@@ -32,6 +32,13 @@ def _read(path):
     return b"".join(parts), h.hexdigest(), size
 
 
+def dd(pe, idx):
+    """DATA_DIRECTORY[idx] entry or None. pefile does NOT pad the list when
+    NumberOfRvaAndSizes is short/malformed, so direct indexing raises."""
+    dirs = pe.OPTIONAL_HEADER.DATA_DIRECTORY
+    return dirs[idx] if idx < len(dirs) else None
+
+
 def cert_table_range(raw, pe):
     """-> (start, end) file offsets of the certificate table, or None.
     Walks consecutive WIN_CERTIFICATE entries (dwLength, 8-byte aligned).

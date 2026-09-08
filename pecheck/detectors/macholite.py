@@ -15,7 +15,7 @@ _THIN = {
 _FAT = b"\xca\xfe\xba\xbe"            # fat headers are big-endian
 
 _CPUTYPE = {7: "x86", 7 | 0x01000000: "x86_64", 12: "arm",
-            12 | 0x01000000: "arm64", 18: "ppc", 0x0100000C: "arm64"}
+            12 | 0x01000000: "arm64", 18: "ppc"}
 _FILETYPE = {1: "object", 2: "executable", 3: "fvmlib", 4: "core", 5: "preload",
              6: "dylib", 7: "dylinker", 8: "bundle", 9: "dylib_stub", 10: "dSYM"}
 LC_LOAD_DYLIB = 0xC

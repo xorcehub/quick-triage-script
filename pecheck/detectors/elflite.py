@@ -42,8 +42,13 @@ def _sections(raw):
     if e_shstrndx < len(ents):
         sn, so, ss = ents[e_shstrndx]
         table = raw[so:so + ss] if so < len(raw) else b""
-        names = [table[n:table.find(b"\x00", n)].decode(errors="replace")
-                 if n < len(table) else "" for n, _, _ in ents]
+        names = []
+        for n, _, _ in ents:
+            if n >= len(table):
+                names.append("")
+                continue
+            q = table.find(b"\x00", n)
+            names.append(table[n:q if q >= 0 else len(table)].decode(errors="replace"))
         return e_machine, e_type, names
     return e_machine, e_type, []
 

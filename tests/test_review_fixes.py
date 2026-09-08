@@ -1,5 +1,6 @@
 """Regression tests for issues found in the post-implementation review."""
 import os
+import struct
 import sys
 import unittest
 import zipfile
@@ -145,6 +146,70 @@ class TestSeverityCalibration(CorpusTest):
         r = scan_file(self.path("bundle.js"))
         crit = [f for f in r.findings if f.severity == "CRITICAL"]
         self.assertFalse([f for f in crit if "mammoth" in f.detail])
+
+
+class TestShortDataDirectories(CorpusTest):
+    """Malformed NumberOfRvaAndSizes must not kill whole detectors (B1)."""
+
+    def _short_dirs(self, n):
+        p = self.path(f"shortdirs{n}.exe")
+        craft_pe(p, imports=("URLDownloadToFileA",), dll_chars=0x0002)
+        data = bytearray(open(p, "rb").read())
+        off = struct.unpack_from("<I", data, 0x3C)[0] + 4 + 20 + 108  # PE32+ NumberOfRvaAndSizes
+        struct.pack_into("<H", data, off, n)
+        open(p, "wb").write(bytes(data))
+        return p
+
+    def test_imports_survive_short_dir_list(self):
+        r = scan_file(self._short_dirs(0))
+        self.assertFalse(any("detector failed" in f.detail for f in r.findings),
+                         [f.detail for f in r.findings])
+        # dir list empty -> import table undeclared -> the 0-imports escape fires
+        self.assertTrue(any("0 imports" in f.detail and f.severity == "CRITICAL"
+                            for f in r.findings))
+        self.assertEqual(r.verdict, "REVIEW")
+
+    def test_critical_import_finding_survives_partial_dirs(self):
+        # ndirs=6 hides only dirs >= 6: dir 1 (IMPORT) stays, URLDownloadToFileA
+        # must keep its CRITICAL verdict (was lost whole-detector before the fix)
+        r = scan_file(self._short_dirs(6))
+        self.assertTrue(any("URLDownloadToFileA" in f.detail and f.severity == "CRITICAL"
+                            for f in r.findings), [f.detail for f in r.findings])
+        self.assertEqual(r.verdict, "REVIEW")
+
+    def test_dotnet_structure_survive_partial_dirs(self):
+        r = scan_file(self._short_dirs(6))
+        failed = [f.detail for f in r.findings if "detector failed" in f.detail]
+        self.assertEqual(failed, [], failed)
+
+
+class TestBigZipNested(CorpusTest):
+    def test_nested_member_listed_once_above_128_entries(self):
+        p = self.path("wide.zip")
+        with zipfile.ZipFile(p, "w") as z:
+            for i in range(130):
+                z.writestr(f"f{i}.txt", "x")
+            z.writestr("inner.zip", "PK\x03\x04....")
+        r = scan_file(p)
+        nested = [f for f in r.findings if "nested archive" in f.detail]
+        self.assertTrue(nested)
+        self.assertEqual(nested[0].detail.count("inner.zip"), 1, nested[0].detail)
+
+
+class TestElfShstrNoNul(unittest.TestCase):
+    def test_last_name_not_truncated_without_trailing_nul(self):
+        from pecheck.detectors.elflite import _sections
+        shoff, shentsize, nsec = 64, 64, 2
+        hdr_end = shoff + shentsize * nsec
+        shstr = b"\x00.text"  # malformed: no trailing NUL
+        buf = bytearray(b"\x7fELF\x02\x01\x01\x00" + b"\x00" * 8)
+        buf += struct.pack("<HHIQQQIHHHHHH", 2, 0x3E, 1, 0, 0, shoff, 0,
+                           64, 0, 0, shentsize, nsec, 1)
+        buf += b"\x00" * shentsize
+        buf += struct.pack("<IIQQQQIIQQ", 1, 1, 0, 0, hdr_end, len(shstr), 0, 0, 0, 0)
+        buf += shstr
+        _, _, names = _sections(bytes(buf))
+        self.assertEqual(names, ["", ".text"])
 
 
 if __name__ == "__main__":

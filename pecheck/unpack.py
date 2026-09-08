@@ -104,9 +104,10 @@ def extract(path, kind):
             shutil.rmtree(dest, ignore_errors=True)
             return None
         _verify_inside(dest)
-        if not any(os.scandir(dest)):  # empty extraction = nothing to re-scan
-            shutil.rmtree(dest, ignore_errors=True)
-            return None
+        with os.scandir(dest) as it:  # empty extraction = nothing to re-scan
+            if not any(it):
+                shutil.rmtree(dest, ignore_errors=True)
+                return None
         return dest
     except Exception:
         shutil.rmtree(dest, ignore_errors=True)
