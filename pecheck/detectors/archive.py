@@ -55,8 +55,6 @@ def _zip(t):
                 seen_kinds.append((name, "ELF"))
             elif head[:4] == b"#@~^":
                 seen_kinds.append((name, "encoded script"))
-        elif low.endswith((".zip", ".7z", ".rar", ".gz")):
-            nested.append(name)
     if any(i.filename == "[Content_Types].xml" for i in infos):
         out += _ooxml(zf, infos)  # members triaged, oleObject MZ heads already caught above
     if exes:

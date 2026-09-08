@@ -4,7 +4,7 @@ import os
 
 from ..model import Finding, CRITICAL
 
-SIDLOAD_NAMES = {
+SIDELOAD_NAMES = {
     "version.dll", "winmm.dll", "dxgi.dll", "d3d9.dll", "d3d11.dll", "d3d12.dll",
     "dinput8.dll", "xinput1_3.dll", "xinput1_4.dll", "dbghelp.dll", "dbgcore.dll",
     "cryptbase.dll", "profapi.dll", "responderhelper.dll", "wlidprov.dll",
@@ -39,7 +39,7 @@ def run(t):
     base = os.path.basename(t.path).lower()
     is_dll = bool(t.pe.FILE_HEADER.Characteristics & 0x2000)
 
-    if is_dll and base in SIDLOAD_NAMES:
+    if is_dll and base in SIDELOAD_NAMES:
         has_exe = any(s.endswith(".exe") for s in t.siblings)
         if has_exe:
             out.append(Finding("SIDELOAD?", f"'{base}' shipped in app dir - classic sideload name "

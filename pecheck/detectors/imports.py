@@ -1,5 +1,6 @@
 """Import-table triage: suspicious APIs, network DLLs, import-count anomalies."""
 from ..model import Finding, CRITICAL, NOTE
+from ..peparse import dd
 
 # exact-name flags: substring match would FP on names like LsaConnectUntrusted
 FUNC_FLAGS_EXACT = {
@@ -63,7 +64,8 @@ def run(t):
                     out.append(Finding(cat, f"{dll}!{name}  ({note})", sev))
                     break
     total_imports = sum(len(e.imports) for e in entries)
-    is_dotnet = pe.OPTIONAL_HEADER.DATA_DIRECTORY[14].Size > 0  # COM descriptor
+    com = dd(pe, 14)  # COM descriptor
+    is_dotnet = bool(com and com.Size)
     if is_dotnet:
         out.append(Finding("NOTE", ".NET assembly - import table is not authoritative"))
     elif total_imports == 0:
