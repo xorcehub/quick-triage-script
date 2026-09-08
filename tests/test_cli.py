@@ -68,6 +68,48 @@ class TestCliJson(CorpusTest):
         self.assertIn("warning: no files match", err.getvalue())
         self.assertEqual(code, 2)
 
+    def test_ext_flag_filters_and_reports_skipped(self):
+        clean = os.path.join(self.dir, "extdir")
+        os.makedirs(clean, exist_ok=True)
+        open(os.path.join(clean, "a.txt"), "w").write("hello")
+        open(os.path.join(clean, "b.png"), "wb").write(b"\x89PNG\r\n\x1a\n" + b"\x00" * 8)
+        open(os.path.join(clean, "c.exe"), "wb").write(b"MZ" + b"\x00" * 62)
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out), contextlib.redirect_stderr(io.StringIO()):
+            code = main([clean, "--json", "--no-sigs", "--ext", "EXE, .txt"])
+        payload = json.loads(out.getvalue())
+        self.assertEqual(payload["skipped"], 1)          # b.png
+        self.assertEqual({os.path.basename(f["path"]) for f in payload["files"]},
+                         {"a.txt", "c.exe"})
+        self.assertEqual(code, 0)  # stub MZ lands ok - the filter is what we test
+        # library level
+        res = scan_targets([clean], use_sigs=False, exts=(".exe",))
+        self.assertEqual(res.skipped, 2)
+        self.assertEqual(len(res.reports), 1)
+
+    def test_norm_exts(self):
+        from pecheck.cli import _norm_exts
+        self.assertEqual(_norm_exts("exe, .DLL"), (".dll", ".exe"))
+        self.assertEqual(_norm_exts(""), ())
+
+    def test_wizard_parsing(self):
+        import builtins
+        from pecheck.cli import _ask_filter
+        real_input = builtins.input
+        try:
+            builtins.input = lambda *a: ""                      # Enter = everything
+            self.assertEqual(_ask_filter(), (None, None))
+            builtins.input = lambda *a: "2,4"                   # combined groups
+            exts, names = _ask_filter()
+            self.assertEqual(names, "executables+documents")
+            self.assertIn(".exe", exts) and self.assertIn(".pdf", exts)
+            answers = iter(["6", "exe, py"])                   # menu pick, then custom list
+            builtins.input = lambda *a: next(answers)
+            exts2, names2 = _ask_filter()
+            self.assertEqual((exts2, names2), ((".exe", ".py"), "custom"))
+        finally:
+            builtins.input = real_input
+
     def test_human_summary_mentions_rollup_and_review(self):
         out = io.StringIO()
         with contextlib.redirect_stdout(out), contextlib.redirect_stderr(io.StringIO()):
