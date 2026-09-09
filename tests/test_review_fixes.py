@@ -196,6 +196,84 @@ class TestBigZipNested(CorpusTest):
         self.assertEqual(nested[0].detail.count("inner.zip"), 1, nested[0].detail)
 
 
+class TestAvLockRetry(unittest.TestCase):
+    """Real-time AV briefly holds fresh files (EINVAL/EACCES on read):
+    _read must retry instead of failing the scan with an error verdict."""
+
+    def test_retries_transient_read_error(self):
+        import errno
+        import hashlib
+        from unittest import mock
+        from pecheck import peparse
+        data = b"hello world"
+        calls = {"n": 0}
+
+        class Flaky:
+            def __init__(self, *a):
+                self.done = False
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *a):
+                return False
+
+            def read(self, n):
+                calls["n"] += 1
+                if calls["n"] <= 2:
+                    raise OSError(errno.EINVAL, "Invalid argument")
+                if not self.done:          # one chunk of payload, then EOF
+                    self.done = True
+                    return data
+                return b""
+
+        with mock.patch("builtins.open", Flaky), \
+                mock.patch("pecheck.peparse.time.sleep") as slept:
+            raw, sha, size = peparse._read("whatever")
+        self.assertEqual((raw, size), (data, len(data)))
+        self.assertEqual(sha, hashlib.sha256(data).hexdigest())
+        self.assertEqual(slept.call_count, 2)   # two failures -> two backoffs
+
+    def test_persistent_error_still_raises(self):
+        import errno
+        from unittest import mock
+        from pecheck import peparse
+
+        class Dead:
+            def __init__(self, *a):
+                pass
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *a):
+                return False
+
+            def read(self, n):
+                raise OSError(errno.EACCES, "Permission denied")
+
+        with mock.patch("builtins.open", Dead), \
+                mock.patch("pecheck.peparse.time.sleep") as slept:
+            with self.assertRaises(OSError):
+                peparse._read("whatever")
+        self.assertEqual(slept.call_count, 3)   # 4 attempts -> 3 backoffs
+
+    def test_enoent_not_retried(self):
+        import errno
+        from unittest import mock
+        from pecheck import peparse
+
+        class Missing:
+            def __init__(self, *a):
+                raise OSError(errno.ENOENT, "No such file")
+
+        with mock.patch("builtins.open", Missing), \
+                mock.patch("pecheck.peparse.time.sleep") as slept:
+            with self.assertRaises(OSError):
+                peparse._read("whatever")
+        self.assertEqual(slept.call_count, 0)   # missing file: fail immediately
+
+
 class TestElfShstrNoNul(unittest.TestCase):
     def test_last_name_not_truncated_without_trailing_nul(self):
         from pecheck.detectors.elflite import _sections

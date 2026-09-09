@@ -15,7 +15,8 @@ _ORDER = {"REVIEW": 0, "error": 1, "unsigned/unknown": 2, "note": 3, "ok": 4}
 # wizard groups: menu key -> (label, extensions)
 _EXT_GROUPS = {
     "2": ("executables", (".exe", ".dll", ".sys", ".scr", ".cpl", ".ocx", ".mui")),
-    "3": ("scripts", (".ps1", ".bat", ".cmd", ".vbs", ".js", ".jse", ".wsf", ".hta", ".py")),
+    "3": ("scripts", (".ps1", ".bat", ".cmd", ".vbs", ".js", ".jse", ".wsf", ".hta", ".py",
+                      ".php", ".scf", ".settingcontent-ms", ".library-ms", ".mht", ".xhtml")),
     "4": ("documents", (".pdf", ".doc", ".docx", ".xls", ".xlsx", ".ppt", ".pptx")),
     "5": ("archives", (".zip", ".7z", ".rar", ".cab", ".iso", ".msi")),
 }

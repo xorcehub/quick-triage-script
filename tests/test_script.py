@@ -38,6 +38,31 @@ class TestScripts(CorpusTest):
     def test_benign_bat_ok(self):
         self.assertEqual(self.report("benign.bat").verdict, "ok")
 
+    def test_ps_staged_dropper_note(self):
+        r = self.report("stager.ps1")
+        self.assertEqual(r.verdict, "note")
+        self.assertTrue(any("staged dropper" in f.detail for f in r.findings))
+
+    def test_sh_staged_chmod_note(self):
+        r = self.report("stager.sh")
+        self.assertEqual(r.verdict, "note")
+        self.assertTrue(any("staged binary" in f.detail for f in r.findings))
+
+    def test_vendor_installer_scripts_not_review(self):
+        for name in ("choco.bat", "choco.ps1"):
+            r = self.report(name)
+            self.assertNotEqual(r.verdict, "REVIEW", name)
+
+    def test_sibling_reference_note(self):
+        r = self.report("launch.bat")
+        self.assertEqual(r.verdict, "note")   # note-level, not REVIEW
+        self.assertTrue(any("sibling" in f.detail and "readme.lnk" in f.detail
+                            for f in r.findings))
+
+    def test_markers_only_in_comments_stay_ok(self):
+        self.assertEqual(self.report("docs.ps1").verdict, "ok")
+        self.assertEqual(self.report("docs.bat").verdict, "ok")
+
     def test_vbs_dropper_trio_review(self):
         crit, v = self.crit("dropper.vbs")
         self.assertEqual(v, "REVIEW")
@@ -92,6 +117,56 @@ class TestScripts(CorpusTest):
         self.assertEqual(v, "REVIEW")
         self.assertTrue(any("smuggling" in d for d in crit))
 
+    def test_mht_smuggling_review(self):
+        crit, v = self.crit("smuggle.mht")
+        self.assertEqual(v, "REVIEW")
+        self.assertTrue(any("smuggling" in d for d in crit))
+
+    def test_xhtml_smuggling_review(self):
+        crit, v = self.crit("smuggle.xhtml")
+        self.assertEqual(v, "REVIEW")
+        self.assertTrue(any("smuggling" in d for d in crit))
+
+    def test_renamed_shell_script_review(self):
+        crit, v = self.crit("renamed.sh.txt")
+        self.assertEqual(v, "REVIEW")
+        self.assertTrue(any("piped straight into shell" in d for d in crit))
+
+    def test_renamed_python_script_review(self):
+        crit, v = self.crit("renamed.py.txt")
+        self.assertEqual(v, "REVIEW")
+        self.assertTrue(any("download" in d.lower() for d in crit))
+
+    def test_renamed_php_review(self):
+        crit, v = self.crit("renamed.php.txt")
+        self.assertEqual(v, "REVIEW")
+        self.assertTrue(any("webshell" in d for d in crit))
+
+    def test_php_webshell_review(self):
+        crit, v = self.crit("shell.php")
+        self.assertEqual(v, "REVIEW")
+        self.assertTrue(any("webshell" in d for d in crit))
+
+    def test_scf_unc_leak(self):
+        r = self.report("leak.scf")
+        self.assertEqual(r.kind, "SCRIPT")
+        self.assertTrue(any("UNC" in f.detail for f in r.findings))
+
+    def test_settingcontent_entity_hidden_review(self):
+        crit, v = self.crit("entity.settingcontent-ms")
+        self.assertEqual(v, "REVIEW")
+        self.assertTrue(any("settingcontent-ms" in d for d in crit))
+
+    def test_settingcontent_ms_args_review(self):
+        crit, v = self.crit("evil.settingcontent-ms")
+        self.assertEqual(v, "REVIEW")
+        self.assertTrue(any("settingcontent-ms" in d for d in crit))
+
+    def test_library_ms_unc(self):
+        r = self.report("lure.library-ms")
+        self.assertEqual(r.kind, "SCRIPT")
+        self.assertTrue(any("UNC" in f.detail for f in r.findings))
+
     def test_sh_command_substitution_review(self):
         crit, v = self.crit("pipe.sh")
         self.assertEqual(v, "REVIEW")
@@ -101,6 +176,76 @@ class TestScripts(CorpusTest):
         crit, v = self.crit("rev.py")
         self.assertEqual(v, "REVIEW")
         self.assertTrue(any("reverse-shell" in d for d in crit))
+
+    def test_bat_ps_one_liner_review(self):
+        crit, v = self.crit("oneliner.bat")
+        self.assertEqual(v, "REVIEW")
+        self.assertTrue(any("batch powershell one-liner" in d for d in crit))
+
+    def test_hex_payload_review(self):
+        crit, v = self.crit("hexpeek.ps1")
+        self.assertEqual(v, "REVIEW")
+        self.assertTrue(any("decoded hex payload" in d for d in crit))
+
+    def test_nested_b64_review(self):
+        crit, v = self.crit("nestedb64.ps1")
+        self.assertEqual(v, "REVIEW")
+        self.assertTrue(any("decoded base64 payload" in d and "powershell" in d for d in crit))
+
+    def test_xor_b64_payload_review(self):
+        crit, v = self.crit("xorpeek.ps1")
+        self.assertEqual(v, "REVIEW")
+        self.assertTrue(any("decoded base64 payload" in d and "powershell" in d for d in crit))
+
+    def test_rot13_b64_payload_review(self):
+        crit, v = self.crit("rotpeek.ps1")
+        self.assertEqual(v, "REVIEW")
+        self.assertTrue(any("decoded base64 payload" in d and "powershell" in d for d in crit))
+
+    def test_chunked_b64_reassembly_review(self):
+        crit, v = self.crit("chunkedb64.ps1")
+        self.assertEqual(v, "REVIEW")
+        self.assertTrue(any("decoded base64-joined payload" in d for d in crit))
+
+    def test_decimal_array_payload_review(self):
+        crit, v = self.crit("decpeek.js")
+        self.assertEqual(v, "REVIEW")
+        self.assertTrue(any("decoded decimal payload" in d for d in crit))
+
+    def test_concat_split_exec_review(self):
+        crit, v = self.crit("concat.ps1")
+        self.assertEqual(v, "REVIEW")
+        self.assertTrue(any("download+execute" in d for d in crit))
+
+    def test_reg_winlogon_hijack_review(self):
+        crit, v = self.crit("winlogon.reg")
+        self.assertEqual(v, "REVIEW")
+        self.assertTrue(any("Winlogon" in d for d in crit))
+
+    def test_reg_service_imagepath_review(self):
+        crit, v = self.crit("svc.reg")
+        self.assertEqual(v, "REVIEW")
+        self.assertTrue(any("ImagePath" in d for d in crit))
+
+    def test_ps_tcpclient_revshell_review(self):
+        crit, v = self.crit("tcpclient.ps1")
+        self.assertEqual(v, "REVIEW")
+        self.assertTrue(any("reverse-shell" in d for d in crit))
+
+    def test_sh_nc_e_revshell_review(self):
+        crit, v = self.crit("ncshell.sh")
+        self.assertEqual(v, "REVIEW")
+        self.assertTrue(any("netcat" in d for d in crit))
+
+    def test_sh_sudo_pipe_review(self):
+        crit, v = self.crit("sudopipe.sh")
+        self.assertEqual(v, "REVIEW")
+        self.assertTrue(any("piped straight into shell" in d for d in crit))
+
+    def test_gzipped_b64_payload_review(self):
+        crit, v = self.crit("gzpeek.ps1")
+        self.assertEqual(v, "REVIEW")
+        self.assertTrue(any("decoded base64 payload" in d for d in crit))
 
     # ---- false-positive side: benign look-alikes stay clean
 
@@ -120,6 +265,35 @@ class TestScripts(CorpusTest):
         r = self.report("good.url")
         self.assertNotEqual(r.verdict, "REVIEW")
 
+    def test_compiled_bytecode_noted(self):
+        for name in ("blob.pyc", "klazz.class"):
+            r = self.report(name)
+            self.assertEqual(r.kind, "COMPILED", name)
+            self.assertTrue(any("compiled script bytecode" in f.detail for f in r.findings))
+            self.assertNotEqual(r.verdict, "ok")   # note floor, not silent
+
+    def test_iso_identified_and_extractable(self):
+        r = self.report("lure.iso")
+        self.assertEqual(r.kind, "ISO")
+        from pecheck.unpack import EXTRACTABLE
+        self.assertIn("ISO", EXTRACTABLE)   # --unpack opens it when 7z is present
+
+    def test_url_trait_scoring(self):
+        r = self.report("phishy.url")
+        self.assertNotEqual(r.verdict, "ok")
+        self.assertTrue(any("suspicious url traits" in f.detail and "cheap TLD" in f.detail
+                            for f in r.findings))
+
+    def test_url_unc_icon_leak_note(self):
+        r = self.report("uncicon.url")
+        self.assertEqual(r.verdict, "note")   # lure-worthy but not REVIEW
+        self.assertTrue(any("UNC" in f.detail for f in r.findings))
+
+    def test_lnk_unc_leak_note(self):
+        # game.lnk targets a local exe - no UNC - stays clean
+        r = self.report("game.lnk")
+        self.assertFalse(any("UNC" in f.detail for f in r.findings))
+
     def test_lnk_powershell_args_review(self):
         crit, v = self.crit("readme.lnk")
         self.assertEqual(v, "REVIEW")
@@ -128,6 +302,17 @@ class TestScripts(CorpusTest):
     def test_lnk_game_target_ok(self):
         r = self.report("game.lnk")
         self.assertNotEqual(r.verdict, "REVIEW")
+
+    def test_lnk_tracker_machine_provenance(self):
+        r = self.report("tracked.lnk")
+        self.assertTrue(any("built on machine" in f.detail and "DESKTOP-EVIL42" in f.detail
+                            for f in r.findings))
+        self.assertEqual(r.verdict, "REVIEW")   # powershell -enc args
+
+    def test_lnk_envvar_splice_obfuscation(self):
+        crit, v = self.crit("envvar.lnk")
+        self.assertEqual(v, "REVIEW")
+        self.assertTrue(any("substring syntax" in d for d in crit))
 
 
 if __name__ == "__main__":

@@ -37,6 +37,31 @@ BENIGN_DOMAINS = (b"microsoft.com", b"windows.com", b"msdn.com", b"w3.org", b"xm
                   b"nvidia.com", b"apple.com", b"adobe.com", b"mozilla.org", b"ietf.org",
                   b"purl.org", b"sourceforge.net", b"digicert.com", b"symantec.com")
 _URLDOM_RE = re.compile(rb"(?:https?|ftp)://([^/:?#]+)", re.I)
+_SUS_SHORT = ("bit.ly", "t.co", "goo.gl", "tinyurl.com", "is.gd", "cutt.ly", "rb.gy",
+              "t.ly", "shorturl.at", "ow.ly", "buff.ly", "rebrand.ly")
+_SUS_TLD = (".xyz", ".top", ".gq", ".cf", ".tk", ".ml", ".click", ".loan", ".cam",
+            ".rest", ".icu", ".cfd", ".sbs", ".monster", ".zip", ".mov")
+
+
+def _url_traits(u):
+    """-> [reasons] - static string facts that make a non-vendor URL look lure-ish."""
+    m = _URLDOM_RE.match(u.encode("latin-1", "ignore"))
+    dom = (m.group(1).decode("latin-1", "ignore") if m else "").lower()
+    if not dom:
+        return []
+    t = []
+    if re.fullmatch(r"\d{1,3}(?:\.\d{1,3}){3}", dom):
+        t.append("raw-IP host")
+    if "xn--" in dom:
+        t.append("punycode host")
+    if any(dom == x or dom.endswith("." + x) for x in _SUS_SHORT):
+        t.append("url shortener")
+    if any(dom.endswith(x) for x in _SUS_TLD):
+        t.append("cheap TLD " + dom[dom.rfind("."):])
+    lab = dom.split(".")[0]
+    if len(lab) >= 16 and any(c.isdigit() for c in lab):
+        t.append("random-looking host")
+    return t
 
 
 def extract_corpus(raw, pe):
@@ -77,6 +102,10 @@ def run(t):
             out.append(Finding("STR", "urls: " + ", ".join(show) + (f" (+{len(sus)-5} more)" if len(sus) > 5 else "")))
         else:
             out.append(Finding("STR", f"{len(urls)} url(s), all known-vendor (cert/doc links)"))
+        traits = [f"{u[:70]} ({', '.join(_url_traits(u))})" for u in sorted(sus) if _url_traits(u)]
+        if traits:
+            out.append(Finding("STR?", "suspicious url traits: " + "; ".join(traits[:3])
+                               + (f" (+{len(traits) - 3} more)" if len(traits) > 3 else "")))
     # exfil-capable webhooks: rare-but-review-worthy in binaries, plausible in scripts;
     # NUL-stripped corpus catches UTF-16LE-stored configs (common in real samples)
     corpus_nc = corpus.replace(b"\x00", b"")

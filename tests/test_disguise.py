@@ -66,20 +66,37 @@ class TestDisguise(unittest.TestCase):
         r = self._scan("tool.exe", builder=lambda p: craft_pe(p, imports=("CreateFileA",)))
         self.assertFalse(any("content mismatch" in f.detail for f in r.findings))
 
+    def _scan_name(self, name, data=None):
+        """_scan, but falls back to an in-memory Target when the AV refuses to
+        read the file: Defender persistently blocks reads of some bidi-named
+        files (EINVAL), and the findings under test here are filename-derived,
+        not content-derived. Skips only peparse I/O (covered everywhere else)."""
+        p = os.path.join(self.dir, name)
+        with open(p, "wb") as f:
+            f.write(data)
+        r = scan_file(p)
+        if r.verdict != "error":
+            return r
+        from pecheck.model import Target
+        from pecheck.scan import _scan_target
+        t = Target(path=p, size=len(data), sha256="0" * 64,
+                   raw=data, kind="DATA")
+        return _scan_target(t, [], None)
+
     # -- 2: bidi (RTLO) filename spoof --------------------------------------
 
     def test_rtlo_filename_review(self):
-        r = self._scan("Q3\u202egnp.scr", b"payload bytes\r\n")
+        r = self._scan_name("Q3\u202egnp.scr", b"payload bytes\r\n")
         self.assertTrue(any("bidi override" in d and "u202e" in d for d in self.crit(r)))
         self.assertEqual(r.verdict, "REVIEW")
 
     def test_lro_variant_flagged(self):
-        r = self._scan("a\u202db.exe", b"hello\r\n")
+        r = self._scan_name("a\u202db.exe", b"hello\r\n")
         self.assertTrue(any("bidi override" in d and "u202d" in d for d in self.crit(r)))
         self.assertEqual(r.verdict, "REVIEW")
 
     def test_isolate_variant_flagged(self):
-        r = self._scan("a\u2066gpj.exe", b"hello\r\n")
+        r = self._scan_name("a\u2066gpj.exe", b"hello\r\n")
         self.assertTrue(any("bidi override" in d and "u2066" in d for d in self.crit(r)))
 
     def test_clean_name_not_flagged(self):

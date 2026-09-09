@@ -27,5 +27,9 @@ class CorpusTest(unittest.TestCase):
 
     @classmethod
     def report(cls, name):
-        from pecheck.scan import scan_file
-        return scan_file(cls.path(name))
+        from pecheck.scan import _scan_target  # fixture: per-file scan + sibling context
+        from pecheck import peparse
+        t = peparse.load(cls.path(name))
+        sibs = [f.lower() for f in os.listdir(cls.dir)
+                if os.path.isfile(os.path.join(cls.dir, f))]
+        return _scan_target(t, sibs, None)
