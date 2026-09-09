@@ -1,5 +1,6 @@
 import os
 import sys
+import tempfile
 import unittest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -8,7 +9,10 @@ from pecheck.model import Target  # noqa: E402
 from pecheck.detectors.raw import run  # noqa: E402
 
 
-def raw_findings(name_or_bytes, path="/tmp/raw_t.bin", kind=None):
+TMP = tempfile.gettempdir()
+
+
+def raw_findings(name_or_bytes, path=os.path.join(TMP, "raw_t.bin"), kind=None):
     from pecheck.identify import kind as ikind
     if isinstance(name_or_bytes, bytes):
         with open(path, "wb") as f:
@@ -30,7 +34,7 @@ class TestRawEmbedded(CorpusTest):
 
     def test_embedded_pe_in_script_is_critical(self):
         pe = open(self.path("CoolGame-CODEX/game.exe"), "rb").read()
-        fs = raw_findings(b"# comment\n" + pe, path="/tmp/raw_ps1.ps1")
+        fs = raw_findings(b"# comment\n" + pe, path=os.path.join(TMP, "raw_ps1.ps1"))
         crit = [f for f in fs if f.severity == "CRITICAL"]
         self.assertTrue(any("embedded executable" in f.detail for f in crit))
 
@@ -48,7 +52,7 @@ class TestRawEmbedded(CorpusTest):
         self.assertTrue(any("entropy" in f.detail for f in fs))
 
     def test_dos_note(self):
-        fs = raw_findings(b"MZ" + b"\x00" * 100, path="/tmp/raw_dos.bin")
+        fs = raw_findings(b"MZ" + b"\x00" * 100, path=os.path.join(TMP, "raw_dos.bin"))
         self.assertTrue(any("DOS/legacy" in f.detail for f in fs))
 
     def test_zip_container_skipped(self):
@@ -57,7 +61,7 @@ class TestRawEmbedded(CorpusTest):
 
     def test_stealer_escalation(self):
         fs = raw_findings(b"AppData\\Local\\Google\\Chrome\\User Data\\Login Data\x00"
-                          b"wallet.dat\x00metamask\x00keystore", path="/tmp/raw_st.bin")
+                          b"wallet.dat\x00metamask\x00keystore", path=os.path.join(TMP, "raw_st.bin"))
         crit = [f for f in fs if f.severity == "CRITICAL"]
         self.assertTrue(any("stealer" in f.detail for f in crit))
 
