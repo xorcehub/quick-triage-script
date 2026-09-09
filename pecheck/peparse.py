@@ -6,6 +6,7 @@ import hashlib
 import os
 import struct
 import sys
+import time
 
 import pefile
 
@@ -16,20 +17,30 @@ _CHUNK = 1 << 20
 
 
 def _read(path):
-    """-> (raw<=RAW_CAP, sha256, size). Streams the hash, caps the buffer."""
-    h = hashlib.sha256()
-    size = 0
-    parts = []
-    with open(path, "rb") as f:
-        while True:
-            b = f.read(_CHUNK)
-            if not b:
-                break
-            size += len(b)
-            h.update(b)
-            if len(parts) < RAW_CAP // _CHUNK:
-                parts.append(b)
-    return b"".join(parts), h.hexdigest(), size
+    """-> (raw<=RAW_CAP, sha256, size). Streams the hash, caps the buffer.
+    Retried on EACCES/EINVAL: real-time AV scanners briefly hold fresh files
+    (the norm when triaging downloads), surfacing as spurious read errors.
+    ponytail: fixed 4 attempts / 1.5s worst case - enough for scanner lag,
+    persistent blocks (genuinely ACL-denied) still fail fast."""
+    for attempt in range(4):
+        try:
+            h = hashlib.sha256()
+            size = 0
+            parts = []
+            with open(path, "rb") as f:
+                while True:
+                    b = f.read(_CHUNK)
+                    if not b:
+                        break
+                    size += len(b)
+                    h.update(b)
+                    if len(parts) < RAW_CAP // _CHUNK:
+                        parts.append(b)
+            return b"".join(parts), h.hexdigest(), size
+        except OSError as e:
+            if e.errno not in (13, 22) or attempt == 3:
+                raise
+            time.sleep((attempt + 1) * 0.25)
 
 
 def dd(pe, idx):

